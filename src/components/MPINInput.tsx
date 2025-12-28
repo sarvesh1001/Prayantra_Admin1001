@@ -173,8 +173,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   inputFilled: {
-    borderColor: '#1565C0',
-    backgroundColor: '#F0F9FF',
+    borderColor: '#C084FC', // Purple
+    backgroundColor: '#FAF5FF',
   },
   inputError: {
     borderColor: '#DC2626',
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   clearButtonText: {
-    color: '#64748B',
+    color: '#C084FC', // Purple
     fontSize: 14,
     fontWeight: '500',
   },

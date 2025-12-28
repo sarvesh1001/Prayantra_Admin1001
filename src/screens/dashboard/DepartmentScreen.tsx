@@ -308,28 +308,28 @@ const DepartmentScreen = () => {
 
   const getDepartmentColor = (dept: string) => {
     const colors: Record<string, string> = {
-      'HR': '#3B82F6',
-      'Finance': '#10B981',
-      'Accounting': '#8B5CF6',
-      'Procurement': '#F59E0B',
-      'Inventory': '#EF4444',
-      'Logistics': '#EC4899',
-      'Sales': '#06B6D4',
-      'Marketing': '#84CC16',
-      'Customer Support': '#F97316',
-      'Operations': '#6366F1',
-      'IT': '#0EA5E9',
-      'Production': '#8B5CF6',
-      'Quality Control': '#10B981',
-      'Quality Assurance': '#3B82F6',
-      'R&D': '#F59E0B',
-      'Administration': '#64748B',
-      'Employee Management': '#3B82F6',
-      'Manager Management': '#10B981',
-      'Company Management': '#8B5CF6',
-      'Super Admin Management': '#EF4444',
+      'HR': '#C084FC',
+      'Finance': '#A855F7',
+      'Accounting': '#9333EA',
+      'Procurement': '#7C3AED',
+      'Inventory': '#6D28D9',
+      'Logistics': '#5B21B6',
+      'Sales': '#4C1D95',
+      'Marketing': '#3B0764',
+      'Customer Support': '#7E22CE',
+      'Operations': '#6B21A8',
+      'IT': '#C084FC',
+      'Production': '#A855F7',
+      'Quality Control': '#9333EA',
+      'Quality Assurance': '#7C3AED',
+      'R&D': '#6D28D9',
+      'Administration': '#5B21B6',
+      'Employee Management': '#C084FC',
+      'Manager Management': '#A855F7',
+      'Company Management': '#9333EA',
+      'Super Admin Management': '#7C3AED',
     };
-    return colors[dept] || '#64748B';
+    return colors[dept] || '#C084FC'; // Default purple
   };
 
   const renderPermissionItem = ({ item }: { item: string }) => (
@@ -773,21 +773,21 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     marginTop: 24,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: '#FAF5FF', // Light purple
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#E9D5FF',
   },
   infoTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0369A1',
+    color: '#C084FC', // Purple
     marginBottom: 12,
   },
   infoText: {
     fontSize: 14,
-    color: '#475569',
+    color: '#6B21A8',
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
   },
   infoItemText: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#7E22CE',
     marginLeft: 6,
   },
 });

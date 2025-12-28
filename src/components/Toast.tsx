@@ -90,9 +90,9 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
       default:
         return {
           icon: 'information',
-          color: '#3B82F6',
-          bgColor: '#DBEAFE',
-          borderColor: '#BFDBFE',
+          color: '#C084FC', // Purple
+          bgColor: '#FAF5FF',
+          borderColor: '#E9D5FF',
         };
     }
   };

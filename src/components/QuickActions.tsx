@@ -29,7 +29,7 @@ const QuickActions: React.FC<QuickActionsProps> = ({ navigation }) => {
               <MaterialCommunityIcons
                 name={action.icon as any}
                 size={24}
-                color="#1565C0"
+                color="#C084FC" // Purple
               />
             </View>
 
@@ -72,12 +72,12 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: '#FAF5FF', // Light purple background
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#E9D5FF',
   },
   actionLabel: {
     fontSize: 13,

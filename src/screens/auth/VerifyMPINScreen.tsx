@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     marginTop: 12,
   },
   formContainer: {
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   forgotText: {
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     fontSize: 14,
     fontWeight: '500',
   },
@@ -294,21 +294,21 @@ const styles = StyleSheet.create({
   },
   securityInfo: {
     marginTop: 32,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: '#FAF5FF', // Light purple
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#E9D5FF',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0369A1',
+    color: '#C084FC', // Purple
     marginBottom: 8,
   },
   securityTip: {
     fontSize: 12,
-    color: '#475569',
+    color: '#6B21A8',
     marginBottom: 4,
   },
 });

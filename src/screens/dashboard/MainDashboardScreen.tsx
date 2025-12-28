@@ -9,11 +9,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import {
-  useNavigation,
-  DrawerActions,
-  NavigationProp,
-} from '@react-navigation/native';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
@@ -21,7 +17,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/services/api';
 import { useToast } from '@/components/Toast';
 import DepartmentCard from '@/components/DepartmentCard';
-import QuickActions from '@/components/QuickActions';
 import StatsOverview from '@/components/StatsOverview';
 
 const { width } = Dimensions.get('window');
@@ -30,15 +25,15 @@ const { width } = Dimensions.get('window');
    Navigation Types
    ============================================================ */
 
-type RootDrawerParamList = {
+type RootStackParamList = {
   MainDashboard: undefined;
   Profile: undefined;
-} & {
-  [key: `Department_${string}`]: { department: string };
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type MainDashboardScreenNavigationProp =
-  NavigationProp<RootDrawerParamList, 'MainDashboard'>;
+  NavigationProp<RootStackParamList, 'MainDashboard'>;
 
 /* ============================================================
    Screen
@@ -75,10 +70,7 @@ const MainDashboardScreen: React.FC = () => {
   };
 
   const handleDepartmentPress = (department: string) => {
-    const screenName: `Department_${string}` =
-      `Department_${department.replace(/\s+/g, '_')}`;
-
-    navigation.navigate(screenName, { department });
+    navigation.navigate('Department', { department });
   };
 
   const handleLogout = () => {
@@ -97,10 +89,6 @@ const MainDashboardScreen: React.FC = () => {
         },
       ],
     );
-  };
-
-  const openDrawer = () => {
-    navigation.dispatch(DrawerActions.openDrawer());
   };
 
   const departments: string[] = adminInfo?.departments || [];
@@ -130,10 +118,6 @@ const MainDashboardScreen: React.FC = () => {
     <View style={styles.container}>
       {/* ================= Header ================= */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={openDrawer} style={styles.menuButton}>
-          <Icon name="menu" size={28} color="#333" />
-        </TouchableOpacity>
-
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Dashboard</Text>
           <Text style={styles.headerSubtitle}>
@@ -145,7 +129,7 @@ const MainDashboardScreen: React.FC = () => {
           onPress={() => navigation.navigate('Profile')}
           style={styles.profileButton}
         >
-          <Icon name="account-circle" size={32} color="#1565C0" />
+          <Icon name="account-circle" size={32} color="#C084FC" /> {/* Purple */}
         </TouchableOpacity>
       </View>
 
@@ -156,8 +140,8 @@ const MainDashboardScreen: React.FC = () => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#1565C0']}
-            tintColor="#1565C0"
+            colors={['#C084FC']} // Purple
+            tintColor="#C084FC" // Purple
           />
         }
         showsVerticalScrollIndicator={false}
@@ -169,7 +153,42 @@ const MainDashboardScreen: React.FC = () => {
           isLoading={isLoading}
         />
 
-        <QuickActions navigation={navigation} />
+        {/* ================= Quick Actions ================= */}
+        <View style={styles.actionsContainer}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionsGrid}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => navigation.navigate('ChangeMPIN')}
+            >
+              <View style={styles.iconContainer}>
+                <Icon name="key-change" size={24} color="#C084FC" />
+              </View>
+              <Text style={styles.actionLabel}>Change MPIN</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.actionButton}>
+              <View style={styles.iconContainer}>
+                <Icon name="file-document" size={24} color="#C084FC" />
+              </View>
+              <Text style={styles.actionLabel}>Reports</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.actionButton}>
+              <View style={styles.iconContainer}>
+                <Icon name="calendar-clock" size={24} color="#C084FC" />
+              </View>
+              <Text style={styles.actionLabel}>Attendance</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.actionButton}>
+              <View style={styles.iconContainer}>
+                <Icon name="chart-bar" size={24} color="#C084FC" />
+              </View>
+              <Text style={styles.actionLabel}>Analytics</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* ================= Departments ================= */}
         <View style={styles.section}>
@@ -205,7 +224,7 @@ const MainDashboardScreen: React.FC = () => {
         {dailyQuota.limit > 0 && (
           <View style={styles.quotaContainer}>
             <View style={styles.quotaHeader}>
-              <Icon name="chart-bar" size={20} color="#1565C0" />
+              <Icon name="chart-bar" size={20} color="#C084FC" /> {/* Purple */}
               <Text style={styles.quotaTitle}>Daily API Quota</Text>
             </View>
 
@@ -263,9 +282,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
 
-  menuButton: { padding: 8 },
-
-  headerTitleContainer: { flex: 1, marginLeft: 16 },
+  headerTitleContainer: { flex: 1 },
 
   headerTitle: {
     fontSize: 22,
@@ -284,6 +301,45 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+  },
+
+  actionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+
+  actionButton: {
+    width: '48%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#FAF5FF', // Light purple background
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+
+  actionLabel: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
   },
 
   section: { marginTop: 24 },
@@ -349,7 +405,7 @@ const styles = StyleSheet.create({
 
   quotaFill: {
     height: '100%',
-    backgroundColor: '#1565C0',
+    backgroundColor: '#C084FC', // Purple
     borderRadius: 4,
   },
 

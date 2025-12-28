@@ -1,6 +1,5 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Screens
@@ -16,54 +15,13 @@ import ChangeMPINScreen from '@/screens/profile/ChangeMPINScreen';
 import DepartmentScreen from '@/screens/dashboard/DepartmentScreen';
 
 const Stack = createNativeStackNavigator();
-const Drawer = createDrawerNavigator();
-
-function MainDrawer() {
-  const { adminInfo } = useAuth();
-
-  return (
-    <Drawer.Navigator
-      screenOptions={{
-        headerShown: true,
-        drawerStyle: {
-          width: '75%',
-        },
-      }}
-    >
-      <Drawer.Screen 
-        name="MainDashboard" 
-        component={MainDashboardScreen}
-        options={{ title: 'Dashboard' }}
-      />
-      
-      {/* Dynamic Department Screens */}
-      {adminInfo?.departments.map((department, index) => (
-        <Drawer.Screen
-          key={department}
-          name={`Department_${department.replace(/\s+/g, '_')}`}
-          component={DepartmentScreen}
-          initialParams={{ department }}
-          options={{
-            title: department,
-            drawerLabel: department,
-          }}
-        />
-      ))}
-      
-      <Drawer.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={{ title: 'My Profile' }}
-      />
-    </Drawer.Navigator>
-  );
-}
 
 export default function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
 
+  // Show loading screen
   if (isLoading) {
-    return null;
+    return null; // Or a simple loading component
   }
 
   return (
@@ -79,10 +37,10 @@ export default function AppNavigator() {
         </>
       ) : (
         <>
-          <Stack.Screen name="MainDrawer" component={MainDrawer} />
-          <Stack.Group screenOptions={{ presentation: 'modal' }}>
-            <Stack.Screen name="ChangeMPIN" component={ChangeMPINScreen} />
-          </Stack.Group>
+          <Stack.Screen name="MainDashboard" component={MainDashboardScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="ChangeMPIN" component={ChangeMPINScreen} />
+          <Stack.Screen name="Department" component={DepartmentScreen} />
         </>
       )}
     </Stack.Navigator>

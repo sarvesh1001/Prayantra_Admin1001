@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     marginTop: 12,
   },
   formContainer: {
@@ -271,14 +271,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   verifyButton: {
-    backgroundColor: '#1565C0',
+    backgroundColor: '#C084FC', // Purple
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 20,
   },
   buttonDisabled: {
-    backgroundColor: '#94A3B8',
+    backgroundColor: '#D8B4FE', // Light purple
   },
   verifyButtonText: {
     color: '#FFFFFF',
@@ -298,11 +298,11 @@ const styles = StyleSheet.create({
   },
   resendButton: {
     fontSize: 14,
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     fontWeight: '600',
   },
   resendButtonDisabled: {
-    color: '#94A3B8',
+    color: '#D8B4FE', // Light purple
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
@@ -321,28 +321,28 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   backButton: {
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 24,
   },
   securityInfo: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: '#FAF5FF', // Light purple
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#E9D5FF',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0369A1',
+    color: '#C084FC', // Purple
     marginBottom: 8,
   },
   securityText: {
     fontSize: 12,
-    color: '#475569',
+    color: '#6B21A8',
     lineHeight: 18,
   },
 });

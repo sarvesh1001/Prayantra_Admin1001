@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     marginTop: 12,
   },
   formContainer: {
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   activeStep: {
-    backgroundColor: '#1565C0',
+    backgroundColor: '#C084FC', // Purple
   },
   stepText: {
     fontSize: 14,
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   button: {
-    backgroundColor: '#1565C0',
+    backgroundColor: '#C084FC', // Purple
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   buttonDisabled: {
-    backgroundColor: '#94A3B8',
+    backgroundColor: '#D8B4FE', // Light purple
   },
   buttonText: {
     color: '#FFFFFF',
@@ -525,11 +525,11 @@ const styles = StyleSheet.create({
   },
   resendButton: {
     fontSize: 14,
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     fontWeight: '600',
   },
   resendButtonDisabled: {
-    color: '#94A3B8',
+    color: '#D8B4FE', // Light purple
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
@@ -555,22 +555,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   guidelines: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: '#FAF5FF', // Light purple
     padding: 16,
     borderRadius: 8,
     marginTop: 24,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: '#E9D5FF',
   },
   guidelinesTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0369A1',
+    color: '#C084FC', // Purple
     marginBottom: 8,
   },
   guideline: {
     fontSize: 13,
-    color: '#475569',
+    color: '#6B21A8',
     marginBottom: 4,
     lineHeight: 18,
   },
@@ -580,27 +580,27 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   backButtonText: {
-    color: '#1565C0',
+    color: '#C084FC', // Purple
     fontSize: 14,
     fontWeight: '500',
   },
   securityInfo: {
     marginTop: 32,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FAF5FF', // Light purple
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E9D5FF',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#475569',
+    color: '#C084FC', // Purple
     marginBottom: 8,
   },
   securityText: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#6B21A8',
     lineHeight: 18,
   },
 });

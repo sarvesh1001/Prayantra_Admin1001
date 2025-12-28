@@ -37,16 +37,16 @@ const departmentIcons: Record<string, string> = {
 };
 
 const departmentColors = [
-  '#3B82F6',
-  '#10B981',
-  '#8B5CF6',
-  '#F59E0B',
-  '#EF4444',
-  '#EC4899',
-  '#06B6D4',
-  '#84CC16',
-  '#F97316',
-  '#6366F1',
+  '#C084FC', // Purple
+  '#A855F7',
+  '#9333EA',
+  '#7C3AED',
+  '#6D28D9',
+  '#5B21B6',
+  '#4C1D95',
+  '#3B0764',
+  '#7E22CE',
+  '#6B21A8',
 ];
 
 const DepartmentCard: React.FC<DepartmentCardProps> = ({

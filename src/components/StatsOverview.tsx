@@ -24,29 +24,29 @@ const StatsOverview: React.FC<StatsOverviewProps> = ({
       icon: 'shield-check',
       label: 'Permissions',
       value: permissions.toString(),
-      color: '#10B981',
-      bgColor: '#D1FAE5',
+      color: '#C084FC', // Purple
+      bgColor: '#FAF5FF',
     },
     {
       icon: 'office-building',
       label: 'Departments',
       value: departments.toString(),
-      color: '#8B5CF6',
-      bgColor: '#EDE9FE',
+      color: '#A855F7', // Purple
+      bgColor: '#F3E8FF',
     },
     {
       icon: 'chart-bar',
       label: 'Quota Used',
       value: dailyQuota.used.toString(),
-      color: '#F59E0B',
-      bgColor: '#FEF3C7',
+      color: '#9333EA', // Purple
+      bgColor: '#E9D5FF',
     },
     {
       icon: 'clock-outline',
       label: 'Quota Left',
       value: dailyQuota.remaining.toString(),
-      color: '#3B82F6',
-      bgColor: '#DBEAFE',
+      color: '#7C3AED', // Purple
+      bgColor: '#DDD6FE',
     },
   ];
 
