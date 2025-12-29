@@ -25,10 +25,7 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDashboard: undefined;
-  Profile: undefined;
-  ChangeMPIN: undefined;
-  Department: { department: string };
+  MainDrawer: undefined;
 };
 
 type SetupMPINScreenRouteProp = RouteProp<RootStackParamList, 'SetupMPIN'>;
@@ -80,6 +77,12 @@ const SetupMPINScreen = () => {
           storePhoneNumber(phoneNumber, admin.admin_id);
           login(phoneNumber, tokens, admin);
           showToast('success', message || 'MPIN setup successful');
+          
+          // Navigate to MainDrawer
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'MainDrawer' }],
+          });
         })
         .catch(error => {
           // If verification fails, still store phone number and redirect to verify MPIN

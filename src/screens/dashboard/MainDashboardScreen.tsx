@@ -9,7 +9,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
@@ -21,15 +21,11 @@ import StatsOverview from '@/components/StatsOverview';
 
 const { width } = Dimensions.get('window');
 
-type RootStackParamList = {
-  MainDashboard: undefined;
-  Profile: undefined;
-  ChangeMPIN: undefined;
-  Department: { department: string };
+// Define navigation types
+type MainDashboardScreenNavigationProp = {
+  navigate: (screen: string, params?: any) => void;
+  openDrawer: () => void;
 };
-
-type MainDashboardScreenNavigationProp =
-  NavigationProp<RootStackParamList, 'MainDashboard'>;
 
 const MainDashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainDashboardScreenNavigationProp>();
@@ -170,6 +166,15 @@ const MainDashboardScreen: React.FC = () => {
     <View style={styles.container}>
       {/* ================= Header ================= */}
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            navigation.openDrawer();
+          }}
+          style={styles.menuButton}
+        >
+          <Icon name="menu" size={24} color="#333" />
+        </TouchableOpacity>
+
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Dashboard</Text>
           <Text style={styles.headerSubtitle}>
@@ -337,6 +342,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+  },
+  menuButton: {
+    padding: 8,
+    marginRight: 12,
   },
   headerTitleContainer: { flex: 1 },
   headerTitle: {

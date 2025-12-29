@@ -324,32 +324,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [storePhoneNumber, startTokenRefresh]);
 
-  const logout = useCallback(async () => {
-    console.log('🚪 [AUTH] Logging out...');
-    try {
-      const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      if (refreshToken) {
-        console.log('📡 [AUTH] Calling logout API...');
-        await api.logout(refreshToken);
-      }
-    } catch (error) {
-      console.error('❌ [AUTH] Logout API error:', error);
-    } finally {
-      console.log('🧹 [AUTH] Clearing session data...');
-      await clearSessionData();
-      queryClient.clear();
-      
-      // Reset all state except phone number
-      setIsAuthenticated(false);
-      setAdminInfo(null);
-      setTokens(null);
-      setLoginFlow(null);
-      
-      // Keep phoneNumber and adminId for next login
-      console.log('✅ [AUTH] Logout complete - Phone number preserved');
-    }
-  }, [queryClient]);
 
+const logout = useCallback(async () => {
+  console.log('🚪 [AUTH] Logging out...');
+  try {
+    const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    if (refreshToken) {
+      console.log('📡 [AUTH] Calling logout API...');
+      await api.logout(refreshToken);
+    }
+  } catch (error) {
+    console.error('❌ [AUTH] Logout API error:', error);
+  } finally {
+    console.log('🧹 [AUTH] Clearing session data...');
+    
+    // Only clear tokens, keep phone number and admin info
+    await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+    await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+    await removeItem(STORAGE_KEYS.ADMIN_INFO);
+    
+    queryClient.clear();
+    
+    // Reset all state except phone number and adminId
+    setIsAuthenticated(false);
+    setAdminInfo(null);
+    setTokens(null);
+    setLoginFlow(null);
+    
+    console.log('✅ [AUTH] Logout complete - Phone number preserved');
+  }
+}, [queryClient]);
   const refreshAuth = useCallback(async (): Promise<boolean> => {
     try {
       console.log('🔄 [AUTH] Refreshing authentication...');

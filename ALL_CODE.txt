@@ -174,6 +174,364 @@ const styles = StyleSheet.create({
 
 export default App;
 ========================================
+FILE: src/components/CustomDrawerContent.tsx
+========================================
+
+
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  StatusBar,
+  Platform,
+} from 'react-native';
+import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/Toast';
+import { useNavigation } from '@react-navigation/native';
+import { DrawerNavigationProp } from '@react-navigation/drawer';
+
+// Define navigation types for Drawer
+type DrawerParamList = {
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
+};
+
+// Define Stack navigation types for navigation to Stack screens
+type StackParamList = {
+  LoginInitiate: undefined;
+  SendOTP: { phoneNumber: string; adminId?: string };
+  VerifyOTP: { phoneNumber: string; adminId?: string };
+  SetupMPIN: { phoneNumber: string; adminId: string };
+  VerifyMPIN: { phoneNumber?: string; adminId?: string };
+  ForgotMPIN: { phoneNumber?: string };
+  MainDrawer: undefined;
+};
+
+type IconName = React.ComponentProps<typeof Icon>['name'];
+
+interface CustomDrawerContentProps {
+  props: any;
+}
+
+const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
+  const { adminInfo, logout } = useAuth();
+  const { showToast } = useToast();
+  const drawerNavigation = useNavigation<DrawerNavigationProp<DrawerParamList>>();
+
+  const handleLogout = async () => {
+    await logout();
+    showToast('success', 'Logged out successfully');
+    // Navigation to VerifyMPIN will be handled by AuthContext/navigation state change
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'super_admin':
+        return '#C084FC';
+      case 'admin':
+        return '#8B5CF6';
+      case 'manager':
+        return '#7C3AED';
+      case 'employee':
+        return '#6D28D9';
+      default:
+        return '#9333EA';
+    }
+  };
+
+  const getRoleName = (role: string) => {
+    switch (role) {
+      case 'super_admin':
+        return 'Super Admin';
+      case 'admin':
+        return 'Administrator';
+      case 'manager':
+        return 'Manager';
+      case 'employee':
+        return 'Employee';
+      default:
+        return role;
+    }
+  };
+
+  const getDepartmentIcon = (department: string): IconName => {
+    const icons: Record<string, IconName> = {
+      'HR': 'account-group',
+      'Finance': 'cash',
+      'Accounting': 'calculator',
+      'Procurement': 'cart',
+      'Inventory': 'warehouse',
+      'Logistics': 'truck',
+      'Sales': 'chart-line',
+      'Marketing': 'bullhorn',
+      'Customer Support': 'headset',
+      'Operations': 'cog',
+      'IT': 'desktop-classic',
+      'Production': 'factory',
+      'Quality Control': 'check-circle',
+      'Quality Assurance': 'shield-check',
+      'R&D': 'flask',
+      'Administration': 'office-building',
+      'Employee Management': 'account-multiple',
+      'Manager Management': 'account-tie',
+      'Company Management': 'domain',
+      'Super Admin Management': 'security',
+    };
+    return icons[department] || 'folder';
+  };
+
+  const departmentColors = [
+    '#C084FC', '#A855F7', '#9333EA', '#7C3AED', '#6D28D9',
+    '#5B21B6', '#4C1D95', '#3B0764', '#7E22CE', '#6B21A8'
+  ];
+
+  const getDepartmentColor = (index: number) => {
+    return departmentColors[index % departmentColors.length];
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar backgroundColor="#C084FC" barStyle="light-content" />
+      
+      {/* Header Section */}
+      <View style={styles.header}>
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            <Icon name="account-circle" size={60} color="#FFFFFF" />
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {adminInfo?.full_name || 'Admin User'}
+            </Text>
+            <Text style={styles.userRole} numberOfLines={1}>
+              {adminInfo?.username || 'admin@company.com'}
+            </Text>
+            <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(adminInfo?.role_string || 'admin') }]}>
+              <Text style={styles.roleBadgeText}>
+                {getRoleName(adminInfo?.role_string || 'admin')}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Icon name="shield-check" size={16} color="#FFFFFF" />
+            <Text style={styles.statText}>
+              {adminInfo?.permissions?.length || 0} Permissions
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Icon name="office-building" size={16} color="#FFFFFF" />
+            <Text style={styles.statText}>
+              {adminInfo?.departments?.length || 0} Departments
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Drawer Content */}
+      <DrawerContentScrollView 
+        {...props}
+        contentContainerStyle={styles.drawerContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <DrawerItemList {...props} />
+        
+        {/* Departments Section */}
+        {adminInfo?.departments && adminInfo.departments.length > 0 && (
+          <View style={styles.departmentsSection}>
+            <Text style={styles.sectionTitle}>Departments</Text>
+            {adminInfo.departments.map((department, index) => (
+              <TouchableOpacity
+                key={department}
+                style={styles.departmentItem}
+                onPress={() => {
+                  drawerNavigation.navigate('Department', { department });
+                  // @ts-ignore
+                  props.navigation.closeDrawer();
+                }}
+              >
+                <View style={[styles.departmentIcon, { backgroundColor: getDepartmentColor(index) }]}>
+                  <Icon 
+                    name={getDepartmentIcon(department)} 
+                    size={20} 
+                    color="#FFFFFF" 
+                  />
+                </View>
+                <Text style={styles.departmentName} numberOfLines={2}>
+                  {department}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </DrawerContentScrollView>
+
+      {/* Footer Section */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          <Icon name="logout" size={20} color="#EF4444" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.versionContainer}>
+          <Text style={styles.versionText}>Prayantra v1.0.0</Text>
+          <Text style={styles.copyrightText}>© 2024 All rights reserved</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    backgroundColor: '#C084FC',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  profileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarContainer: {
+    marginRight: 16,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  userRole: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 8,
+  },
+  roleBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  drawerContent: {
+    paddingTop: 20,
+  },
+  departmentsSection: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  departmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  departmentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  departmentName: {
+    fontSize: 14,
+    color: '#1E293B',
+    fontWeight: '500',
+    flex: 1,
+  },
+  footer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  versionContainer: {
+    alignItems: 'center',
+  },
+  versionText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  copyrightText: {
+    fontSize: 10,
+    color: '#94A3B8',
+  },
+});
+
+export default CustomDrawerContent;
+========================================
 FILE: src/components/DepartmentCard.tsx
 ========================================
 
@@ -2067,32 +2425,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [storePhoneNumber, startTokenRefresh]);
 
-  const logout = useCallback(async () => {
-    console.log('🚪 [AUTH] Logging out...');
-    try {
-      const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      if (refreshToken) {
-        console.log('📡 [AUTH] Calling logout API...');
-        await api.logout(refreshToken);
-      }
-    } catch (error) {
-      console.error('❌ [AUTH] Logout API error:', error);
-    } finally {
-      console.log('🧹 [AUTH] Clearing session data...');
-      await clearSessionData();
-      queryClient.clear();
-      
-      // Reset all state except phone number
-      setIsAuthenticated(false);
-      setAdminInfo(null);
-      setTokens(null);
-      setLoginFlow(null);
-      
-      // Keep phoneNumber and adminId for next login
-      console.log('✅ [AUTH] Logout complete - Phone number preserved');
-    }
-  }, [queryClient]);
 
+const logout = useCallback(async () => {
+  console.log('🚪 [AUTH] Logging out...');
+  try {
+    const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    if (refreshToken) {
+      console.log('📡 [AUTH] Calling logout API...');
+      await api.logout(refreshToken);
+    }
+  } catch (error) {
+    console.error('❌ [AUTH] Logout API error:', error);
+  } finally {
+    console.log('🧹 [AUTH] Clearing session data...');
+    
+    // Only clear tokens, keep phone number and admin info
+    await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+    await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+    await removeItem(STORAGE_KEYS.ADMIN_INFO);
+    
+    queryClient.clear();
+    
+    // Reset all state except phone number and adminId
+    setIsAuthenticated(false);
+    setAdminInfo(null);
+    setTokens(null);
+    setLoginFlow(null);
+    
+    console.log('✅ [AUTH] Logout complete - Phone number preserved');
+  }
+}, [queryClient]);
   const refreshAuth = useCallback(async (): Promise<boolean> => {
     try {
       console.log('🔄 [AUTH] Refreshing authentication...');
@@ -2234,9 +2596,11 @@ FILE: src/navigation/AppNavigator.tsx
 
 import React, { useEffect, useRef } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useAuth } from '@/contexts/AuthContext';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { CommonActions, NavigationContainerRef } from '@react-navigation/native';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
 // Screens
 import LoginInitiateScreen from '@/screens/auth/LoginInitiateScreen';
@@ -2249,8 +2613,10 @@ import MainDashboardScreen from '@/screens/dashboard/MainDashboardScreen';
 import ProfileScreen from '@/screens/profile/ProfileScreen';
 import ChangeMPINScreen from '@/screens/profile/ChangeMPINScreen';
 import DepartmentScreen from '@/screens/dashboard/DepartmentScreen';
+import CustomDrawerContent from '@/components/CustomDrawerContent';
 
 const Stack = createNativeStackNavigator();
+const Drawer = createDrawerNavigator();
 
 // Create a navigation ref
 export const navigationRef = React.createRef<NavigationContainerRef<any>>();
@@ -2267,9 +2633,82 @@ const SCREENS = {
   PROFILE: 'Profile',
   CHANGE_MPIN: 'ChangeMPIN',
   DEPARTMENT: 'Department',
+  MAIN_DRAWER: 'MainDrawer',
 };
 
-const RootStack = () => {
+// Drawer Navigator Component
+const MainDrawer = () => {
+  return (
+    <Drawer.Navigator
+      drawerContent={(props) => <CustomDrawerContent props={props} />}
+      screenOptions={{
+        headerShown: false,
+        drawerType: 'slide',
+        overlayColor: 'transparent',
+        drawerStyle: {
+          width: 300,
+          backgroundColor: 'transparent',
+        },
+        drawerActiveTintColor: '#C084FC',
+        drawerInactiveTintColor: '#64748B',
+        drawerLabelStyle: {
+          fontSize: 14,
+          fontWeight: '500',
+          marginLeft: -16,
+        },
+        drawerItemStyle: {
+          borderRadius: 8,
+          marginHorizontal: 8,
+          marginVertical: 4,
+        },
+      }}
+    >
+      <Drawer.Screen
+        name={SCREENS.MAIN_DASHBOARD}
+        component={MainDashboardScreen}
+        options={{
+          drawerLabel: 'Dashboard',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="view-dashboard" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name={SCREENS.PROFILE}
+        component={ProfileScreen}
+        options={{
+          drawerLabel: 'Profile',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="account" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name={SCREENS.CHANGE_MPIN}
+        component={ChangeMPINScreen}
+        options={{
+          drawerLabel: 'Change MPIN',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="key-change" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name={SCREENS.DEPARTMENT}
+        component={DepartmentScreen}
+        options={{
+          drawerLabel: 'Department Details',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="office-building" size={size} color={color} />
+          ),
+        }}
+      />
+    </Drawer.Navigator>
+  );
+};
+
+// Main App Navigator
+const AppNavigator = () => {
   const { isAuthenticated, isLoading, isInitializing, phoneNumber } = useAuth();
 
   console.log('🔄 AppNavigator State:', {
@@ -2293,7 +2732,7 @@ const RootStack = () => {
   let initialRouteName = SCREENS.LOGIN_INITIATE;
   
   if (isAuthenticated) {
-    initialRouteName = SCREENS.MAIN_DASHBOARD;
+    initialRouteName = SCREENS.MAIN_DRAWER;
   } else if (phoneNumber) {
     // If we have phone number but not authenticated, go to MPIN verification
     initialRouteName = SCREENS.VERIFY_MPIN;
@@ -2303,152 +2742,69 @@ const RootStack = () => {
 
   return (
     <Stack.Navigator 
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ 
+        headerShown: false,
+        animation: 'slide_from_right',
+      }}
       initialRouteName={initialRouteName}
     >
       {/* Auth Screens */}
-      <Stack.Screen name={SCREENS.LOGIN_INITIATE} component={LoginInitiateScreen} />
-      <Stack.Screen name={SCREENS.SEND_OTP} component={SendOTPScreen} />
-      <Stack.Screen name={SCREENS.VERIFY_OTP} component={VerifyOTPScreen} />
-      <Stack.Screen name={SCREENS.SETUP_MPIN} component={SetupMPINScreen} />
-      <Stack.Screen name={SCREENS.VERIFY_MPIN} component={VerifyMPINScreen} />
-      <Stack.Screen name={SCREENS.FORGOT_MPIN} component={ForgotMPINScreen} />
+      <Stack.Screen 
+        name={SCREENS.LOGIN_INITIATE} 
+        component={LoginInitiateScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen 
+        name={SCREENS.SEND_OTP} 
+        component={SendOTPScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen 
+        name={SCREENS.VERIFY_OTP} 
+        component={VerifyOTPScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen 
+        name={SCREENS.SETUP_MPIN} 
+        component={SetupMPINScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen 
+        name={SCREENS.VERIFY_MPIN} 
+        component={VerifyMPINScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen 
+        name={SCREENS.FORGOT_MPIN} 
+        component={ForgotMPINScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
       
       {/* Main App Screens */}
-      <Stack.Screen name={SCREENS.MAIN_DASHBOARD} component={MainDashboardScreen} />
-      <Stack.Screen name={SCREENS.PROFILE} component={ProfileScreen} />
-      <Stack.Screen name={SCREENS.CHANGE_MPIN} component={ChangeMPINScreen} />
-      <Stack.Screen name={SCREENS.DEPARTMENT} component={DepartmentScreen} />
+      <Stack.Screen 
+        name={SCREENS.MAIN_DRAWER} 
+        component={MainDrawer}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
     </Stack.Navigator>
   );
 };
 
-export default RootStack;
-// import React, { useEffect, useRef } from 'react';
-// import { createNativeStackNavigator } from '@react-navigation/native-stack';
-// import { useAuth } from '@/contexts/AuthContext';
-// import { View, ActivityIndicator } from 'react-native';
-// import { CommonActions, NavigationContainerRef } from '@react-navigation/native';
-
-// // Screens
-// import LoginInitiateScreen from '@/screens/auth/LoginInitiateScreen';
-// import SendOTPScreen from '@/screens/auth/SendOTPScreen';
-// import VerifyOTPScreen from '@/screens/auth/VerifyOTPScreen';
-// import SetupMPINScreen from '@/screens/auth/SetupMPINScreen';
-// import VerifyMPINScreen from '@/screens/auth/VerifyMPINScreen';
-// import ForgotMPINScreen from '@/screens/auth/ForgotMPINScreen';
-// import MainDashboardScreen from '@/screens/dashboard/MainDashboardScreen';
-// import ProfileScreen from '@/screens/profile/ProfileScreen';
-// import ChangeMPINScreen from '@/screens/profile/ChangeMPINScreen';
-// import DepartmentScreen from '@/screens/dashboard/DepartmentScreen';
-
-// const Stack = createNativeStackNavigator();
-
-// // Create a navigation ref
-// export const navigationRef = React.createRef<NavigationContainerRef<any>>();
-
-// // Define all screen names as constants to avoid typos
-// const SCREENS = {
-//   LOGIN_INITIATE: 'LoginInitiate',
-//   SEND_OTP: 'SendOTP',
-//   VERIFY_OTP: 'VerifyOTP',
-//   SETUP_MPIN: 'SetupMPIN',
-//   VERIFY_MPIN: 'VerifyMPIN',
-//   FORGOT_MPIN: 'ForgotMPIN',
-//   MAIN_DASHBOARD: 'MainDashboard',
-//   PROFILE: 'Profile',
-//   CHANGE_MPIN: 'ChangeMPIN',
-//   DEPARTMENT: 'Department',
-// };
-
-// const RootStack = () => {
-//   const { isAuthenticated, isLoading, isInitializing, phoneNumber, validateSession } = useAuth();
-//   const initialRouteChecked = useRef(false);
-
-//   console.log('🔄 AppNavigator State:', {
-//     isAuthenticated,
-//     isLoading,
-//     isInitializing,
-//     phoneNumber,
-//     hasPhone: !!phoneNumber
-//   });
-
-//   // Validate session when app starts or when authentication state changes
-//   useEffect(() => {
-//     const checkSessionAndNavigate = async () => {
-//       if (isAuthenticated && !isLoading && !isInitializing) {
-//         try {
-//           console.log('🔍 Validating session on app start...');
-//           const isValid = await validateSession();
-          
-//           if (!isValid) {
-//             console.log('❌ Session invalid on app start, forcing logout');
-//             // We'll handle this in the AuthContext, but reset navigation
-//             if (navigationRef.current) {
-//               navigationRef.current.dispatch(
-//                 CommonActions.reset({
-//                   index: 0,
-//                   routes: [{ name: SCREENS.VERIFY_MPIN }],
-//                 })
-//               );
-//             }
-//           }
-//         } catch (error) {
-//           console.error('❌ Session validation error on app start:', error);
-//         }
-//       }
-//     };
-
-//     if (!initialRouteChecked.current) {
-//       initialRouteChecked.current = true;
-//       checkSessionAndNavigate();
-//     }
-//   }, [isAuthenticated, isLoading, isInitializing, validateSession]);
-
-//   // Show loading screen with proper component
-//   if (isLoading || isInitializing) {
-//     return (
-//       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-//         <ActivityIndicator size="large" color="#C084FC" />
-//       </View>
-//     );
-//   }
-
-//   // Determine initial route based on authentication state
-//   let initialRouteName = SCREENS.LOGIN_INITIATE;
-  
-//   if (isAuthenticated) {
-//     initialRouteName = SCREENS.MAIN_DASHBOARD;
-//   } else if (phoneNumber) {
-//     // If we have phone number but not authenticated, go to MPIN verification
-//     initialRouteName = SCREENS.VERIFY_MPIN;
-//   }
-
-//   console.log('📍 Initial Route:', initialRouteName);
-
-//   return (
-//     <Stack.Navigator 
-//       screenOptions={{ headerShown: false }}
-//       initialRouteName={initialRouteName}
-//     >
-//       {/* Auth Screens */}
-//       <Stack.Screen name={SCREENS.LOGIN_INITIATE} component={LoginInitiateScreen} />
-//       <Stack.Screen name={SCREENS.SEND_OTP} component={SendOTPScreen} />
-//       <Stack.Screen name={SCREENS.VERIFY_OTP} component={VerifyOTPScreen} />
-//       <Stack.Screen name={SCREENS.SETUP_MPIN} component={SetupMPINScreen} />
-//       <Stack.Screen name={SCREENS.VERIFY_MPIN} component={VerifyMPINScreen} />
-//       <Stack.Screen name={SCREENS.FORGOT_MPIN} component={ForgotMPINScreen} />
-      
-//       {/* Main App Screens */}
-//       <Stack.Screen name={SCREENS.MAIN_DASHBOARD} component={MainDashboardScreen} />
-//       <Stack.Screen name={SCREENS.PROFILE} component={ProfileScreen} />
-//       <Stack.Screen name={SCREENS.CHANGE_MPIN} component={ChangeMPINScreen} />
-//       <Stack.Screen name={SCREENS.DEPARTMENT} component={DepartmentScreen} />
-//     </Stack.Navigator>
-//   );
-// };
-
-// export default RootStack;
+export default AppNavigator;
 ========================================
 FILE: src/screens/AnimatedPrayantraLogo.tsx
 ========================================
@@ -4790,10 +5146,7 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDashboard: undefined;
-  Profile: undefined;
-  ChangeMPIN: undefined;
-  Department: { department: string };
+  MainDrawer: undefined;
 };
 
 type SetupMPINScreenRouteProp = RouteProp<RootStackParamList, 'SetupMPIN'>;
@@ -4845,6 +5198,12 @@ const SetupMPINScreen = () => {
           storePhoneNumber(phoneNumber, admin.admin_id);
           login(phoneNumber, tokens, admin);
           showToast('success', message || 'MPIN setup successful');
+          
+          // Navigate to MainDrawer
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'MainDrawer' }],
+          });
         })
         .catch(error => {
           // If verification fails, still store phone number and redirect to verify MPIN
@@ -5193,6 +5552,7 @@ export default SetupMPINScreen;
 FILE: src/screens/auth/VerifyMPINScreen.tsx
 ========================================
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -5224,10 +5584,7 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDashboard: undefined;
-  Profile: undefined;
-  ChangeMPIN: undefined;
-  Department: { department: string };
+  MainDrawer: undefined;
 };
 
 type VerifyMPINScreenRouteProp = RouteProp<RootStackParamList, 'VerifyMPIN'>;
@@ -5328,10 +5685,10 @@ const VerifyMPINScreen = () => {
         
         showToast('success', message || 'Login successful');
         
-        // Navigate to MainDashboard
+        // Navigate to MainDrawer
         navigation.reset({
           index: 0,
-          routes: [{ name: 'MainDashboard' }],
+          routes: [{ name: 'MainDrawer' }],
         });
       } else {
         const errorMessage = response.data.message || 'MPIN verification failed';
@@ -7026,7 +7383,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
@@ -7038,15 +7395,11 @@ import StatsOverview from '@/components/StatsOverview';
 
 const { width } = Dimensions.get('window');
 
-type RootStackParamList = {
-  MainDashboard: undefined;
-  Profile: undefined;
-  ChangeMPIN: undefined;
-  Department: { department: string };
+// Define navigation types
+type MainDashboardScreenNavigationProp = {
+  navigate: (screen: string, params?: any) => void;
+  openDrawer: () => void;
 };
-
-type MainDashboardScreenNavigationProp =
-  NavigationProp<RootStackParamList, 'MainDashboard'>;
 
 const MainDashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainDashboardScreenNavigationProp>();
@@ -7187,6 +7540,15 @@ const MainDashboardScreen: React.FC = () => {
     <View style={styles.container}>
       {/* ================= Header ================= */}
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            navigation.openDrawer();
+          }}
+          style={styles.menuButton}
+        >
+          <Icon name="menu" size={24} color="#333" />
+        </TouchableOpacity>
+
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Dashboard</Text>
           <Text style={styles.headerSubtitle}>
@@ -7354,6 +7716,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+  },
+  menuButton: {
+    padding: 8,
+    marginRight: 12,
   },
   headerTitleContainer: { flex: 1 },
   headerTitle: {
@@ -7950,22 +8316,437 @@ export default ChangeMPINScreen;
 FILE: src/screens/profile/ProfileScreen.tsx
 ========================================
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/Toast';
+
+type IconName = React.ComponentProps<typeof Icon>['name'];
 
 const ProfileScreen = () => {
+  const navigation = useNavigation();
+  const { adminInfo, logout } = useAuth();
+  const { showToast } = useToast();
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'super_admin':
+        return '#C084FC';
+      case 'admin':
+        return '#8B5CF6';
+      case 'manager':
+        return '#7C3AED';
+      case 'employee':
+        return '#6D28D9';
+      default:
+        return '#9333EA';
+    }
+  };
+
+  const getRoleName = (role: string) => {
+    switch (role) {
+      case 'super_admin':
+        return 'Super Administrator';
+      case 'admin':
+        return 'Administrator';
+      case 'manager':
+        return 'Manager';
+      case 'employee':
+        return 'Employee';
+      default:
+        return role;
+    }
+  };
+
+  const getDepartmentIcon = (department: string): IconName => {
+    const icons: Record<string, IconName> = {
+      'HR': 'account-group',
+      'Finance': 'cash',
+      'Accounting': 'calculator',
+      'Procurement': 'cart',
+      'Inventory': 'warehouse',
+      'Logistics': 'truck',
+      'Sales': 'chart-line',
+      'Marketing': 'bullhorn',
+      'Customer Support': 'headset',
+      'Operations': 'cog',
+      'IT': 'desktop-classic',
+      'Production': 'factory',
+      'Quality Control': 'check-circle',
+      'Quality Assurance': 'shield-check',
+      'R&D': 'flask',
+      'Administration': 'office-building',
+      'Employee Management': 'account-multiple',
+      'Manager Management': 'account-tie',
+      'Company Management': 'domain',
+      'Super Admin Management': 'security',
+    };
+    return icons[department] || 'folder';
+  };
+
+  const departmentColors = [
+    '#C084FC', '#A855F7', '#9333EA', '#7C3AED', '#6D28D9',
+    '#5B21B6', '#4C1D95', '#3B0764', '#7E22CE', '#6B21A8'
+  ];
+
+  const getDepartmentColor = (index: number) => {
+    return departmentColors[index % departmentColors.length];
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            showToast('success', 'Logged out successfully');
+            // @ts-ignore
+            navigation.navigate('LoginInitiate');
+          },
+        },
+      ],
+    );
+  };
+
   return (
-    <View style={styles.container}>
-      <Text>Profile Screen</Text>
-    </View>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            // @ts-ignore
+            navigation.openDrawer();
+          }}
+          style={styles.backButton}
+        >
+          <Icon name="arrow-left" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      {/* Profile Card */}
+      <View style={styles.profileCard}>
+        <View style={styles.avatarContainer}>
+          <Icon name="account-circle" size={80} color="#C084FC" />
+          <View style={[styles.roleBadge, { backgroundColor: getRoleColor(adminInfo?.role_string || 'admin') }]}>
+            <Text style={styles.roleBadgeText}>
+              {getRoleName(adminInfo?.role_string || 'admin')}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.name}>{adminInfo?.full_name || 'Admin User'}</Text>
+        <Text style={styles.username}>@{adminInfo?.username || 'admin'}</Text>
+
+        <View style={styles.infoGrid}>
+          <View style={styles.infoItem}>
+            <Icon name="office-building" size={20} color="#C084FC" />
+            <Text style={styles.infoLabel}>Departments</Text>
+            <Text style={styles.infoValue}>{adminInfo?.departments?.length || 0}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Icon name="shield-check" size={20} color="#C084FC" />
+            <Text style={styles.infoLabel}>Permissions</Text>
+            <Text style={styles.infoValue}>{adminInfo?.permissions?.length || 0}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Icon name="account-check" size={20} color="#C084FC" />
+            <Text style={styles.infoLabel}>Status</Text>
+            <Text style={styles.infoValue}>
+              {adminInfo?.is_active ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Departments Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Departments</Text>
+        <View style={styles.departmentsGrid}>
+          {adminInfo?.departments?.map((dept, index) => (
+            <View key={dept} style={styles.departmentTag}>
+              <Icon 
+                name={getDepartmentIcon(dept)} 
+                size={16} 
+                color={getDepartmentColor(index)} 
+                style={styles.departmentIcon}
+              />
+              <Text style={styles.departmentText}>{dept}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Actions Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Account Actions</Text>
+        
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('ChangeMPIN' as never)}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: '#F5F3FF' }]}>
+            <Icon name="key-change" size={24} color="#C084FC" />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Change MPIN</Text>
+            <Text style={styles.actionSubtitle}>Update your secure login PIN</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color="#CBD5E1" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleLogout}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: '#FEF2F2' }]}>
+            <Icon name="logout" size={24} color="#EF4444" />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={[styles.actionTitle, { color: '#EF4444' }]}>Logout</Text>
+            <Text style={styles.actionSubtitle}>Sign out from your account</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color="#CBD5E1" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Permissions Section (Collapsible) */}
+      {adminInfo?.permissions && adminInfo.permissions.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Permissions ({adminInfo.permissions.length})
+          </Text>
+          <View style={styles.permissionsGrid}>
+            {adminInfo.permissions.slice(0, 20).map((permission, index) => (
+              <View key={index} style={styles.permissionTag}>
+                <Text style={styles.permissionText}>{permission}</Text>
+              </View>
+            ))}
+            {adminInfo.permissions.length > 20 && (
+              <Text style={styles.moreText}>
+                +{adminInfo.permissions.length - 20} more permissions
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Prayantra Admin Dashboard</Text>
+        <Text style={styles.versionText}>Version 1.0.0</Text>
+      </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  roleBadge: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  name: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  username: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 24,
+  },
+  infoGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 16,
+  },
+  infoItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  section: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 16,
+  },
+  departmentsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+  },
+  departmentTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    margin: 4,
+  },
+  departmentIcon: {
+    marginRight: 6,
+  },
+  departmentText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  actionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  actionContent: {
+    flex: 1,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  actionSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  permissionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+  },
+  permissionTag: {
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    margin: 4,
+  },
+  permissionText: {
+    fontSize: 11,
+    color: '#6D28D9',
+    fontWeight: '500',
+  },
+  moreText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+    width: '100%',
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 40,
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  versionText: {
+    fontSize: 12,
+    color: '#94A3B8',
   },
 });
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -29,10 +30,7 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDashboard: undefined;
-  Profile: undefined;
-  ChangeMPIN: undefined;
-  Department: { department: string };
+  MainDrawer: undefined;
 };
 
 type VerifyMPINScreenRouteProp = RouteProp<RootStackParamList, 'VerifyMPIN'>;
@@ -133,10 +131,10 @@ const VerifyMPINScreen = () => {
         
         showToast('success', message || 'Login successful');
         
-        // Navigate to MainDashboard
+        // Navigate to MainDrawer
         navigation.reset({
           index: 0,
-          routes: [{ name: 'MainDashboard' }],
+          routes: [{ name: 'MainDrawer' }],
         });
       } else {
         const errorMessage = response.data.message || 'MPIN verification failed';

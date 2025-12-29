@@ -1,4 +1,3 @@
-// babel.config.js
 module.exports = function (api) {
   api.cache(true);
 
@@ -31,8 +30,6 @@ module.exports = function (api) {
           },
         },
       ],
-
-      // ✅ CORRECT for Expo SDK 54
       'react-native-reanimated/plugin',
     ],
   };
