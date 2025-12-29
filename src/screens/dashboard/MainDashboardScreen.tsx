@@ -25,11 +25,12 @@ const { width } = Dimensions.get('window');
 type MainDashboardScreenNavigationProp = {
   navigate: (screen: string, params?: any) => void;
   openDrawer: () => void;
+  reset: (state: any) => void;
 };
 
 const MainDashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainDashboardScreenNavigationProp>();
-  const { adminInfo, logout, validateSession } = useAuth();
+  const { adminInfo, logout, validateSession, clearTokensAndNavigate } = useAuth();
   const { showToast } = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -39,32 +40,47 @@ const MainDashboardScreen: React.FC = () => {
     used: 0,
   });
   const [isSessionValidated, setIsSessionValidated] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   // Validate session on component mount
   useEffect(() => {
     const validateSessionOnMount = async () => {
       try {
-        console.log('🔍 Validating session on dashboard mount...');
+        console.log('🔍 [DASHBOARD] Validating session on mount...');
+        setIsCheckingSession(true);
         const isValid = await validateSession();
         
         if (!isValid) {
-          console.log('❌ Session invalid on dashboard mount');
-          showToast('error', 'Session expired. Please login again.');
-          // Clear session and navigate to VerifyMPIN
-          await logout();
+          console.log('❌ [DASHBOARD] Session invalid on mount');
+          showToast('error', 'Session expired. Please login with MPIN.');
+          
+          // Clear tokens and navigate to VerifyMPIN
+          await clearTokensAndNavigate();
+          
+          // Navigate to VerifyMPIN
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'VerifyMPIN' }],
+          });
         } else {
-          console.log('✅ Session validated on dashboard mount');
+          console.log('✅ [DASHBOARD] Session validated on mount');
           setIsSessionValidated(true);
         }
       } catch (error) {
-        console.error('❌ Session validation error on dashboard:', error);
+        console.error('❌ [DASHBOARD] Session validation error on mount:', error);
         showToast('error', 'Session validation failed. Please login again.');
-        await logout();
+        await clearTokensAndNavigate();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'VerifyMPIN' }],
+        });
+      } finally {
+        setIsCheckingSession(false);
       }
     };
 
     validateSessionOnMount();
-  }, [validateSession, logout, showToast]);
+  }, [validateSession, clearTokensAndNavigate, showToast, navigation]);
 
   // Validate session when screen comes into focus
   useFocusEffect(
@@ -72,28 +88,42 @@ const MainDashboardScreen: React.FC = () => {
       const validateOnFocus = async () => {
         if (isSessionValidated) {
           try {
-            console.log('🔍 Validating session on focus...');
+            console.log('🔍 [DASHBOARD] Validating session on focus...');
             const isValid = await validateSession();
             
             if (!isValid) {
-              console.log('❌ Session invalid on focus');
-              showToast('error', 'Session expired. Please login again.');
-              await logout();
+              console.log('❌ [DASHBOARD] Session invalid on focus');
+              showToast('error', 'Session expired. Please login with MPIN.');
+              
+              // Use the new function instead of logout
+              await clearTokensAndNavigate();
+              
+              // Navigate to VerifyMPIN
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'VerifyMPIN' }],
+              });
             }
           } catch (error) {
-            console.error('❌ Session validation error on focus:', error);
+            console.error('❌ [DASHBOARD] Session validation error on focus:', error);
+            showToast('error', 'Session validation failed. Please login again.');
+            await clearTokensAndNavigate();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'VerifyMPIN' }],
+            });
           }
         }
       };
 
       validateOnFocus();
-    }, [validateSession, logout, showToast, isSessionValidated])
+    }, [validateSession, clearTokensAndNavigate, showToast, isSessionValidated, navigation])
   );
 
   const { data: profileData, refetch, isLoading: profileLoading } = useQuery({
     queryKey: ['adminProfile'],
     queryFn: () => api.getAdminProfile(),
-    enabled: !!adminInfo && isSessionValidated,
+    enabled: !!adminInfo && isSessionValidated && !isCheckingSession,
   });
 
   useEffect(() => {
@@ -124,6 +154,12 @@ const MainDashboardScreen: React.FC = () => {
           onPress: async () => {
             await logout();
             showToast('success', 'Logged out successfully');
+            
+            // Navigate to VerifyMPIN after logout
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'VerifyMPIN' }],
+            });
           },
         },
       ],
@@ -131,9 +167,10 @@ const MainDashboardScreen: React.FC = () => {
   };
 
   // Show loading while validating session
-  if (!isSessionValidated) {
+  if (isCheckingSession || !isSessionValidated) {
     return (
       <View style={styles.loadingContainer}>
+        <Icon name="shield-check" size={60} color="#C084FC" />
         <Text style={styles.loadingText}>Validating session...</Text>
       </View>
     );
@@ -332,6 +369,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: '#64748B',
+    marginTop: 20,
   },
   header: {
     flexDirection: 'row',

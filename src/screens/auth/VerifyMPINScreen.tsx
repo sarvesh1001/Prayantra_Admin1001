@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -11,6 +10,7 @@ import {
   Alert,
   Keyboard,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, NavigationProp, useRoute, RouteProp } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -19,7 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
 import MPINInput, { MPINInputRef } from '@/components/MPINInput';
-import { getFormattedPhoneNumber } from '@/services/storage';
+import { getFormattedPhoneNumber, hasStoredPhoneNumber } from '@/services/storage';
 
 const { height } = Dimensions.get('window');
 
@@ -50,21 +50,52 @@ const VerifyMPINScreen = () => {
   const [lockTime, setLockTime] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingPhone, setIsLoadingPhone] = useState(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const mpinInputRef = useRef<MPINInputRef>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     const loadPhoneNumber = async () => {
-      if (params?.phoneNumber) {
-        setPhoneNumber(params.phoneNumber);
-      } else {
-        const storedPhone = await getFormattedPhoneNumber();
-        if (storedPhone) {
-          setPhoneNumber(storedPhone);
+      setIsLoadingPhone(true);
+      try {
+        if (params?.phoneNumber) {
+          setPhoneNumber(params.phoneNumber);
+        } else {
+          const hasPhone = await hasStoredPhoneNumber();
+          if (hasPhone) {
+            const storedPhone = await getFormattedPhoneNumber();
+            if (storedPhone) {
+              setPhoneNumber(storedPhone);
+            } else {
+              // If no phone number is available, navigate to LoginInitiate
+              showToast('error', 'Phone number not found. Please login again.');
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'LoginInitiate' }],
+              });
+            }
+          } else {
+            // If no phone number is available, navigate to LoginInitiate
+            showToast('info', 'Please login with your phone number');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginInitiate' }],
+            });
+          }
         }
+      } catch (error) {
+        console.error('Error loading phone number:', error);
+        showToast('error', 'Error loading phone number');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'LoginInitiate' }],
+        });
+      } finally {
+        setIsLoadingPhone(false);
       }
     };
+    
     loadPhoneNumber();
 
     const keyboardDidShowListener = Keyboard.addListener(
@@ -219,6 +250,7 @@ const VerifyMPINScreen = () => {
           style: 'destructive',
           onPress: async () => {
             await clearPhoneNumber();
+            showToast('success', 'Phone number removed');
             navigation.reset({
               index: 0,
               routes: [{ name: 'LoginInitiate' }],
@@ -235,6 +267,15 @@ const VerifyMPINScreen = () => {
       routes: [{ name: 'LoginInitiate' }],
     });
   };
+
+  if (isLoadingPhone) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -263,7 +304,7 @@ const VerifyMPINScreen = () => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Enter MPIN</Text>
           <Text style={styles.subtitle}>
-            {phoneNumber ? `Logged in as ${phoneNumber}` : 'Enter your 6-digit MPIN'}
+            {phoneNumber ? `Enter MPIN for ${phoneNumber}` : 'Enter your 6-digit MPIN'}
           </Text>
 
           <MPINInput
@@ -338,6 +379,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+  },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
@@ -403,15 +455,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  loadingText: {
-    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },

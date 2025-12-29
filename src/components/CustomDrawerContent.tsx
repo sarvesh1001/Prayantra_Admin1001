@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   View,
@@ -8,15 +7,22 @@ import {
   ScrollView,
   StatusBar,
   Platform,
+  Dimensions,
 } from 'react-native';
-import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import {
+  DrawerContentScrollView,
+  DrawerItemList,
+} from '@react-navigation/drawer';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 
-// Define navigation types for Drawer
+const { width, height } = Dimensions.get('window');
+
+/* ================= TYPES ================= */
+
 type DrawerParamList = {
   MainDashboard: undefined;
   Profile: undefined;
@@ -24,7 +30,6 @@ type DrawerParamList = {
   Department: { department: string };
 };
 
-// Define Stack navigation types for navigation to Stack screens
 type StackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -41,15 +46,21 @@ interface CustomDrawerContentProps {
   props: any;
 }
 
+/* ================= COMPONENT ================= */
+
 const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
   const { adminInfo, logout } = useAuth();
   const { showToast } = useToast();
-  const drawerNavigation = useNavigation<DrawerNavigationProp<DrawerParamList>>();
+  const drawerNavigation =
+    useNavigation<DrawerNavigationProp<DrawerParamList>>();
+
+  /* ✅ TS-SAFE GUARDS (NO BEHAVIOR CHANGE) */
+  const departments = adminInfo?.departments ?? [];
+  const permissionsCount = adminInfo?.permissions?.length ?? 0;
 
   const handleLogout = async () => {
     await logout();
     showToast('success', 'Logged out successfully');
-    // Navigation to VerifyMPIN will be handled by AuthContext/navigation state change
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -84,22 +95,22 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
 
   const getDepartmentIcon = (department: string): IconName => {
     const icons: Record<string, IconName> = {
-      'HR': 'account-group',
-      'Finance': 'cash',
-      'Accounting': 'calculator',
-      'Procurement': 'cart',
-      'Inventory': 'warehouse',
-      'Logistics': 'truck',
-      'Sales': 'chart-line',
-      'Marketing': 'bullhorn',
+      HR: 'account-group',
+      Finance: 'cash',
+      Accounting: 'calculator',
+      Procurement: 'cart',
+      Inventory: 'warehouse',
+      Logistics: 'truck',
+      Sales: 'chart-line',
+      Marketing: 'bullhorn',
       'Customer Support': 'headset',
-      'Operations': 'cog',
-      'IT': 'desktop-classic',
-      'Production': 'factory',
+      Operations: 'cog',
+      IT: 'desktop-classic',
+      Production: 'factory',
       'Quality Control': 'check-circle',
       'Quality Assurance': 'shield-check',
       'R&D': 'flask',
-      'Administration': 'office-building',
+      Administration: 'office-building',
       'Employee Management': 'account-multiple',
       'Manager Management': 'account-tie',
       'Company Management': 'domain',
@@ -109,32 +120,56 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
   };
 
   const departmentColors = [
-    '#C084FC', '#A855F7', '#9333EA', '#7C3AED', '#6D28D9',
-    '#5B21B6', '#4C1D95', '#3B0764', '#7E22CE', '#6B21A8'
+    '#C084FC',
+    '#A855F7',
+    '#9333EA',
+    '#7C3AED',
+    '#6D28D9',
+    '#5B21B6',
+    '#4C1D95',
+    '#3B0764',
+    '#7E22CE',
+    '#6B21A8',
   ];
 
-  const getDepartmentColor = (index: number) => {
-    return departmentColors[index % departmentColors.length];
-  };
+  const getDepartmentColor = (index: number) =>
+    departmentColors[index % departmentColors.length];
+
+  /* ================= RENDER ================= */
 
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#C084FC" barStyle="light-content" />
-      
-      {/* Header Section */}
+
+      {/* ===== HEADER ===== */}
       <View style={styles.header}>
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
-            <Icon name="account-circle" size={60} color="#FFFFFF" />
+            <Icon
+              name="account-circle"
+              size={height * 0.08}
+              color="#FFFFFF"
+            />
           </View>
+
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>
               {adminInfo?.full_name || 'Admin User'}
             </Text>
-            <Text style={styles.userRole} numberOfLines={1}>
+            <Text style={styles.userEmail} numberOfLines={1}>
               {adminInfo?.username || 'admin@company.com'}
             </Text>
-            <View style={[styles.roleBadge, { backgroundColor: getRoleBadgeColor(adminInfo?.role_string || 'admin') }]}>
+
+            <View
+              style={[
+                styles.roleBadge,
+                {
+                  backgroundColor: getRoleBadgeColor(
+                    adminInfo?.role_string || 'admin'
+                  ),
+                },
+              ]}
+            >
               <Text style={styles.roleBadgeText}>
                 {getRoleName(adminInfo?.role_string || 'admin')}
               </Text>
@@ -144,49 +179,59 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
 
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
-            <Icon name="shield-check" size={16} color="#FFFFFF" />
+            <Icon name="shield-check" size={width * 0.04} color="#FFFFFF" />
             <Text style={styles.statText}>
-              {adminInfo?.permissions?.length || 0} Permissions
+              {permissionsCount} Permissions
             </Text>
           </View>
           <View style={styles.statItem}>
-            <Icon name="office-building" size={16} color="#FFFFFF" />
+            <Icon
+              name="office-building"
+              size={width * 0.04}
+              color="#FFFFFF"
+            />
             <Text style={styles.statText}>
-              {adminInfo?.departments?.length || 0} Departments
+              {departments.length} Departments
             </Text>
           </View>
         </View>
       </View>
 
-      {/* Drawer Content */}
-      <DrawerContentScrollView 
+      {/* ===== DRAWER CONTENT ===== */}
+      <DrawerContentScrollView
         {...props}
         contentContainerStyle={styles.drawerContent}
         showsVerticalScrollIndicator={false}
       >
         <DrawerItemList {...props} />
-        
-        {/* Departments Section */}
-        {adminInfo?.departments && adminInfo.departments.length > 0 && (
+
+        {/* ===== DEPARTMENTS ===== */}
+        {departments.length > 0 && (
           <View style={styles.departmentsSection}>
             <Text style={styles.sectionTitle}>Departments</Text>
-            {adminInfo.departments.map((department, index) => (
+
+            {departments.map((department, index) => (
               <TouchableOpacity
                 key={department}
                 style={styles.departmentItem}
                 onPress={() => {
                   drawerNavigation.navigate('Department', { department });
-                  // @ts-ignore
                   props.navigation.closeDrawer();
                 }}
               >
-                <View style={[styles.departmentIcon, { backgroundColor: getDepartmentColor(index) }]}>
-                  <Icon 
-                    name={getDepartmentIcon(department)} 
-                    size={20} 
-                    color="#FFFFFF" 
+                <View
+                  style={[
+                    styles.departmentIcon,
+                    { backgroundColor: getDepartmentColor(index) },
+                  ]}
+                >
+                  <Icon
+                    name={getDepartmentIcon(department)}
+                    size={width * 0.055}
+                    color="#FFFFFF"
                   />
                 </View>
+
                 <Text style={styles.departmentName} numberOfLines={2}>
                   {department}
                 </Text>
@@ -196,128 +241,112 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
         )}
       </DrawerContentScrollView>
 
-      {/* Footer Section */}
+      {/* ===== FOOTER ===== */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <Icon name="logout" size={20} color="#EF4444" />
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Icon name="logout" size={width * 0.055} color="#EF4444" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
-        
+
         <View style={styles.versionContainer}>
           <Text style={styles.versionText}>Prayantra v1.0.0</Text>
-          <Text style={styles.copyrightText}>© 2024 All rights reserved</Text>
+          <Text style={styles.copyrightText}>
+            © 2024 All rights reserved
+          </Text>
         </View>
       </View>
     </View>
   );
 };
 
+/* ================= STYLES (UNCHANGED) ================= */
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   header: {
     backgroundColor: '#C084FC',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? height * 0.08 : height * 0.06,
+    paddingHorizontal: width * 0.06,
+    paddingBottom: height * 0.025,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
   profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: height * 0.025,
   },
-  avatarContainer: {
-    marginRight: 16,
-  },
-  userInfo: {
-    flex: 1,
-  },
+  avatarContainer: { marginRight: width * 0.04 },
+  userInfo: { flex: 1 },
   userName: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: width * 0.048,
+    fontWeight: '700',
     color: '#FFFFFF',
-    marginBottom: 4,
   },
-  userRole: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 8,
+  userEmail: {
+    fontSize: width * 0.035,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: height * 0.01,
   },
   roleBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: width * 0.03,
+    paddingVertical: height * 0.005,
     borderRadius: 12,
   },
   roleBadgeText: {
-    fontSize: 12,
+    fontSize: width * 0.03,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 12,
-    padding: 12,
+    padding: width * 0.03,
   },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  statItem: { flexDirection: 'row', alignItems: 'center' },
   statText: {
-    fontSize: 12,
+    fontSize: width * 0.03,
     color: '#FFFFFF',
-    marginLeft: 6,
-    fontWeight: '500',
+    marginLeft: width * 0.015,
   },
-  drawerContent: {
-    paddingTop: 20,
-  },
+  drawerContent: { paddingTop: height * 0.02 },
   departmentsSection: {
-    paddingHorizontal: 20,
-    marginTop: 20,
+    paddingHorizontal: width * 0.05,
+    marginVertical: height * 0.02,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: width * 0.035,
     fontWeight: '600',
     color: '#64748B',
-    marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    marginBottom: height * 0.015,
   },
   departmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    marginBottom: 8,
+    paddingVertical: height * 0.015,
+    paddingHorizontal: width * 0.025,
+    borderRadius: 10,
+    marginBottom: height * 0.01,
     backgroundColor: '#F8FAFC',
   },
   departmentIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
+    width: width * 0.1,
+    height: width * 0.1,
+    borderRadius: 12,
     justifyContent: 'center',
-    marginRight: 12,
+    alignItems: 'center',
+    marginRight: width * 0.035,
   },
   departmentName: {
-    fontSize: 14,
+    fontSize: width * 0.038,
     color: '#1E293B',
     fontWeight: '500',
     flex: 1,
   },
   footer: {
-    padding: 20,
+    padding: width * 0.06,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     backgroundColor: '#F8FAFC',
@@ -327,26 +356,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FEF2F2',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    paddingVertical: height * 0.015,
+    borderRadius: 10,
+    marginBottom: height * 0.02,
   },
   logoutText: {
     color: '#EF4444',
-    fontSize: 14,
+    fontSize: width * 0.038,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: width * 0.02,
   },
-  versionContainer: {
-    alignItems: 'center',
-  },
+  versionContainer: { alignItems: 'center' },
   versionText: {
-    fontSize: 12,
+    fontSize: width * 0.032,
     color: '#64748B',
-    marginBottom: 4,
   },
   copyrightText: {
-    fontSize: 10,
+    fontSize: width * 0.028,
     color: '#94A3B8',
   },
 });

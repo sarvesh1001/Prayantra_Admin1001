@@ -49,24 +49,32 @@ const MainDrawer = () => {
         headerShown: false,
         drawerType: 'slide',
         overlayColor: 'transparent',
+
         drawerStyle: {
           width: 300,
           backgroundColor: 'transparent',
         },
+
         drawerActiveTintColor: '#C084FC',
         drawerInactiveTintColor: '#64748B',
+
+        // ✅ NO negative margins
         drawerLabelStyle: {
           fontSize: 14,
           fontWeight: '500',
-          marginLeft: -16,
+          marginLeft: 8,
         },
+
         drawerItemStyle: {
           borderRadius: 8,
           marginHorizontal: 8,
           marginVertical: 4,
+          paddingHorizontal: 12,
         },
       }}
     >
+      {/* ✅ REQUIRED CHILDREN */}
+
       <Drawer.Screen
         name={SCREENS.MAIN_DASHBOARD}
         component={MainDashboardScreen}
@@ -77,6 +85,7 @@ const MainDrawer = () => {
           ),
         }}
       />
+
       <Drawer.Screen
         name={SCREENS.PROFILE}
         component={ProfileScreen}
@@ -87,6 +96,7 @@ const MainDrawer = () => {
           ),
         }}
       />
+
       <Drawer.Screen
         name={SCREENS.CHANGE_MPIN}
         component={ChangeMPINScreen}
@@ -97,6 +107,7 @@ const MainDrawer = () => {
           ),
         }}
       />
+
       <Drawer.Screen
         name={SCREENS.DEPARTMENT}
         component={DepartmentScreen}
@@ -110,6 +121,7 @@ const MainDrawer = () => {
     </Drawer.Navigator>
   );
 };
+
 
 // Main App Navigator
 const AppNavigator = () => {

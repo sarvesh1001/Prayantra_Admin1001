@@ -30,6 +30,7 @@ interface AuthContextType {
   storePhoneNumber: (phone: string, adminId?: string) => Promise<void>;
   clearPhoneNumber: () => Promise<void>;
   validateSession: () => Promise<boolean>;
+  clearTokensAndNavigate: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,9 +91,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('⚠️ [AUTH] Could not decode token:', decodeError);
       }
 
-      // Wait a moment to ensure token is fully processed
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       console.log('📡 [AUTH] Calling validateSession API...');
       const response = await api.validateSession();
       console.log('✅ [AUTH] Session validation response:', response.data);
@@ -143,6 +141,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('❌ [AUTH] Error clearing phone number:', error);
     }
   }, []);
+
+  const clearTokensAndNavigate = useCallback(async () => {
+    console.log('🔐 [AUTH] Clearing tokens for session validation failure...');
+    
+    try {
+      // Clear only tokens, keep phone number and admin ID for VerifyMPIN
+      await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+      await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+      await removeItem(STORAGE_KEYS.ADMIN_INFO);
+      
+      queryClient.clear();
+      
+      // Reset auth state but keep phone number for VerifyMPIN
+      setIsAuthenticated(false);
+      setAdminInfo(null);
+      setTokens(null);
+      setLoginFlow(null);
+      
+      console.log('✅ [AUTH] Tokens cleared, ready for VerifyMPIN');
+    } catch (error) {
+      console.error('❌ [AUTH] Error clearing tokens:', error);
+    }
+  }, [queryClient]);
 
   const initializeAuth = useCallback(async () => {
     try {
@@ -195,20 +216,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               token_type: 'Bearer'
             };
             
-            // Set state first
-            setAdminInfo(adminInfoData);
-            setTokens(tokensData);
-            setIsAuthenticated(true);
+            // Validate session before setting state
+            const isValid = await validateSession();
             
-            // Start token refresh
-            startTokenRefresh();
-            console.log('✅ [AUTH] Authentication restored successfully');
+            if (isValid) {
+              // Set state first
+              setAdminInfo(adminInfoData);
+              setTokens(tokensData);
+              setIsAuthenticated(true);
+              
+              // Start token refresh
+              startTokenRefresh();
+              console.log('✅ [AUTH] Authentication restored successfully');
+            } else {
+              console.log('❌ [AUTH] Stored session is invalid');
+              await clearTokensAndNavigate();
+            }
           } catch (error) {
             console.error('❌ [AUTH] Error parsing stored data:', error);
-            await clearSessionData();
-            setAdminInfo(null);
-            setTokens(null);
-            setIsAuthenticated(false);
+            await clearTokensAndNavigate();
           }
         } else {
           // Missing required data, not authenticated
@@ -228,7 +254,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       setIsInitializing(false);
     }
-  }, []);
+  }, [validateSession, clearTokensAndNavigate]);
 
   useEffect(() => {
     console.log('🚀 [AUTH] AuthProvider mounted, initializing auth...');
@@ -324,36 +350,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [storePhoneNumber, startTokenRefresh]);
 
-
-const logout = useCallback(async () => {
-  console.log('🚪 [AUTH] Logging out...');
-  try {
-    const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
-    if (refreshToken) {
-      console.log('📡 [AUTH] Calling logout API...');
-      await api.logout(refreshToken);
+  const logout = useCallback(async () => {
+    console.log('🚪 [AUTH] Logging out...');
+    try {
+      const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      if (refreshToken) {
+        console.log('📡 [AUTH] Calling logout API...');
+        await api.logout(refreshToken);
+      }
+    } catch (error) {
+      console.error('❌ [AUTH] Logout API error:', error);
+    } finally {
+      console.log('🧹 [AUTH] Clearing all auth data...');
+      
+      // Clear ALL auth data including phone number for logout scenario
+      await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+      await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+      await removeItem(STORAGE_KEYS.ADMIN_INFO);
+      await removeItem(STORAGE_KEYS.ADMIN_ID);
+      await removeItem(STORAGE_KEYS.PHONE_NUMBER);
+      
+      queryClient.clear();
+      
+      // Reset all state
+      setIsAuthenticated(false);
+      setAdminInfo(null);
+      setTokens(null);
+      setLoginFlow(null);
+      setPhoneNumber(null);
+      setAdminId(null);
+      
+      console.log('✅ [AUTH] Logout complete - All auth data cleared');
     }
-  } catch (error) {
-    console.error('❌ [AUTH] Logout API error:', error);
-  } finally {
-    console.log('🧹 [AUTH] Clearing session data...');
-    
-    // Only clear tokens, keep phone number and admin info
-    await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-    await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-    await removeItem(STORAGE_KEYS.ADMIN_INFO);
-    
-    queryClient.clear();
-    
-    // Reset all state except phone number and adminId
-    setIsAuthenticated(false);
-    setAdminInfo(null);
-    setTokens(null);
-    setLoginFlow(null);
-    
-    console.log('✅ [AUTH] Logout complete - Phone number preserved');
-  }
-}, [queryClient]);
+  }, [queryClient]);
+
   const refreshAuth = useCallback(async (): Promise<boolean> => {
     try {
       console.log('🔄 [AUTH] Refreshing authentication...');
@@ -441,6 +471,7 @@ const logout = useCallback(async () => {
     storePhoneNumber,
     clearPhoneNumber,
     validateSession,
+    clearTokensAndNavigate,
   };
 
   return (
