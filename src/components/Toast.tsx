@@ -74,14 +74,14 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
     switch (type) {
       case 'success':
         return {
-          icon: 'check-circle',
+          icon: 'check-circle' as const,
           color: '#10B981',
           bgColor: '#D1FAE5',
           borderColor: '#A7F3D0',
         };
       case 'error':
         return {
-          icon: 'alert-circle',
+          icon: 'alert-circle' as const,
           color: '#EF4444',
           bgColor: '#FEE2E2',
           borderColor: '#FECACA',
@@ -89,8 +89,8 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
       case 'info':
       default:
         return {
-          icon: 'information',
-          color: '#C084FC', // Purple
+          icon: 'information' as const,
+          color: '#C084FC',
           bgColor: '#FAF5FF',
           borderColor: '#E9D5FF',
         };
@@ -119,7 +119,7 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
     >
       <View style={styles.content}>
         <MaterialCommunityIcons
-          name={config.icon as any}
+          name={config.icon}
           size={20}
           color={config.color}
         />

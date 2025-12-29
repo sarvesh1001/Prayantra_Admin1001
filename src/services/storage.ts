@@ -4,6 +4,10 @@ import * as SecureStore from 'expo-secure-store';
 // Regular storage for non-sensitive data
 export const setItem = async (key: string, value: string): Promise<void> => {
   try {
+    if (value === undefined || value === null) {
+      console.warn(`Attempting to store null/undefined value for key: ${key}`);
+      return;
+    }
     await AsyncStorage.setItem(key, value);
   } catch (error) {
     console.error('Error storing data:', error);
@@ -27,15 +31,15 @@ export const removeItem = async (key: string): Promise<void> => {
   }
 };
 
-// Clear only session data, keep phone number and device info
+// Clear only session data (tokens and admin info), keep phone number
 export const clearSessionData = async (): Promise<void> => {
   try {
     const keys = [
-      'access_token',
-      'refresh_token',
-      'admin_info',
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.ADMIN_INFO,
     ];
-
+    
     await AsyncStorage.multiRemove(keys);
     console.log("✅ SESSION DATA CLEARED, PHONE NUMBER & ADMIN ID PRESERVED");
   } catch (error) {
@@ -47,12 +51,11 @@ export const clearSessionData = async (): Promise<void> => {
 export const clearAllUserData = async (): Promise<void> => {
   try {
     const keys = [
-      'access_token',
-      'refresh_token',
-      'admin_id',
-      'admin_info',
-      'phone_number',
-      'country_code',
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.ADMIN_ID,
+      STORAGE_KEYS.ADMIN_INFO,
+      STORAGE_KEYS.PHONE_NUMBER,
     ];
 
     await AsyncStorage.multiRemove(keys);
@@ -81,55 +84,33 @@ export const clearAllStorage = async (): Promise<void> => {
 // Helper to check if user has stored phone number
 export const hasStoredPhoneNumber = async (): Promise<boolean> => {
   try {
-    const phoneNumber = await getItem('phone_number');
-    const adminId = await getItem('admin_id');
+    const phoneNumber = await getItem(STORAGE_KEYS.PHONE_NUMBER);
+    const adminId = await getItem(STORAGE_KEYS.ADMIN_ID);
     return !!(phoneNumber && adminId);
   } catch (error) {
     return false;
   }
 };
 
-// Get formatted phone number with country code
+// Get formatted phone number (stored as +919876543210 format)
 export const getFormattedPhoneNumber = async (): Promise<string | null> => {
   try {
-    const phoneNumber = await getItem('phone_number');
-    const countryCode = await getItem('country_code') || '+91';
-    
-    if (phoneNumber) {
-      return `${countryCode}${phoneNumber}`;
-    }
-    return null;
+    const phoneNumber = await getItem(STORAGE_KEYS.PHONE_NUMBER);
+    // Return phone number as stored (format: +919876543210)
+    return phoneNumber;
   } catch (error) {
     return null;
   }
 };
 
-// Add these constants at the top
+// Storage keys based on your API responses
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',
   REFRESH_TOKEN: 'refresh_token',
   ADMIN_ID: 'admin_id',
   ADMIN_INFO: 'admin_info',
-  PHONE_NUMBER: 'phone_number',
-  COUNTRY_CODE: 'country_code',
+  PHONE_NUMBER: 'phone_number', // Store as +919876543210 format
   DEVICE_ID: 'device_id',
   USER_AGENT: 'user_agent',
-  IS_FIRST_LAUNCH: 'is_first_launch',
-  ROLE_MASK: 'role_mask',
-  PERMISSION_MASK: 'permission_mask',
-};
-
-// Add this helper function
-export const getAdminRole = async (): Promise<number> => {
-  try {
-    const adminInfoStr = await getItem('admin_info');
-    if (adminInfoStr) {
-      const adminInfo = JSON.parse(adminInfoStr);
-      return adminInfo.role_mask || 0;
-    }
-    return 0;
-  } catch (error) {
-    console.error('Error getting admin role:', error);
-    return 0;
-  }
+  DEVICE_FINGERPRINT: 'device_fingerprint',
 };

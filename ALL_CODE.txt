@@ -4,16 +4,25 @@ FILE: App.tsx
 ========================================
 
 import 'react-native-gesture-handler';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
-import { View, Text, StyleSheet } from 'react-native'; // Added missing imports
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  StatusBar as RNStatusBar
+} from 'react-native';
 import { QueryProvider } from './src/contexts/QueryProvider';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ToastProvider } from './src/components/Toast';
-import AppNavigator from './src/navigation/AppNavigator';
+import AppNavigator, { navigationRef } from './src/navigation/AppNavigator';
 import SplashScreen from './src/screens/SplashScreen';
 import { initializeDeviceInfo } from './src/services/deviceInfo';
 import * as SplashScreenModule from 'expo-splash-screen';
@@ -25,40 +34,75 @@ const App = () => {
   const [isReady, setIsReady] = useState(false);
   const [deviceInitialized, setDeviceInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    async function prepare() {
-      try {
-        await initializeDeviceInfo();
-        setDeviceInitialized(true);
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
 
-        // Simulate loading
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      } catch (e: any) {
-        console.error('App initialization failed:', e);
-        setError(e.message || 'Unknown error');
-      } finally {
-        setIsReady(true);
-        try {
-          await SplashScreenModule.hideAsync();
-        } catch (e) {
-          console.error('Failed to hide splash screen:', e);
-        }
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const prepare = useCallback(async () => {
+    try {
+      await initializeDeviceInfo();
+      setDeviceInitialized(true);
+
+      // Simulate loading
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    } catch (e: any) {
+      console.error('App initialization failed:', e);
+      setError(e.message || 'Unknown error');
+    } finally {
+      setIsReady(true);
+      try {
+        await SplashScreenModule.hideAsync();
+      } catch (e) {
+        console.error('Failed to hide splash screen:', e);
       }
     }
-
-    prepare();
   }, []);
+
+  useEffect(() => {
+    prepare();
+  }, [prepare]);
 
   // Show error screen
   if (error) {
     return (
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={styles.errorContainer}>
+          <SafeAreaView style={[
+            styles.errorContainer,
+            { paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0 }
+          ]}>
             <Text style={styles.errorTitle}>Initialization Error</Text>
             <Text style={styles.errorText}>{error}</Text>
-          </View>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                setIsReady(false);
+                setDeviceInitialized(false);
+                prepare();
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
         </GestureHandlerRootView>
       </SafeAreaProvider>
     );
@@ -69,15 +113,21 @@ const App = () => {
     return <SplashScreen />;
   }
 
-  // Main app
+  // Main app with KeyboardAvoidingView for Android
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryProvider>
           <AuthProvider>
             <ToastProvider>
-              <NavigationContainer>
-                <AppNavigator />
+              <NavigationContainer ref={navigationRef}>
+                <KeyboardAvoidingView 
+                  style={{ flex: 1 }}
+                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                >
+                  <AppNavigator />
+                </KeyboardAvoidingView>
               </NavigationContainer>
             </ToastProvider>
           </AuthProvider>
@@ -105,8 +155,20 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#7F1D1D',
-    marginBottom: 20,
+    marginBottom: 30,
     textAlign: 'center',
+    lineHeight: 24,
+  },
+  retryButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
@@ -232,7 +294,7 @@ export default React.memo(DepartmentCard);
 FILE: src/components/MPINInput.tsx
 ========================================
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   TextInput,
@@ -241,25 +303,37 @@ import {
   Keyboard,
   Text,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
 interface MPINInputProps {
   length?: number;
-  onComplete: (mpin: string) => void;
+  onComplete?: (mpin: string) => void;
+  onSubmit?: (mpin: string) => void;
   error?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
+  showSubmitButton?: boolean;
+  secureTextEntry?: boolean;
 }
 
-const MPINInput: React.FC<MPINInputProps> = ({
+export interface MPINInputRef {
+  clearAll: () => void;
+  focus: () => void;
+}
+
+const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
   length = 6,
   onComplete,
+  onSubmit,
   error = false,
   disabled = false,
   autoFocus = true,
-}) => {
+  showSubmitButton = true,
+  secureTextEntry = true,
+}, ref) => {
   const [mpin, setMpin] = useState<string[]>(Array(length).fill(''));
   const inputsRef = useRef<TextInput[]>([]);
 
@@ -267,7 +341,7 @@ const MPINInput: React.FC<MPINInputProps> = ({
     if (autoFocus) {
       setTimeout(() => {
         inputsRef.current[0]?.focus();
-      }, 100);
+      }, 300);
     }
   }, [autoFocus]);
 
@@ -291,8 +365,12 @@ const MPINInput: React.FC<MPINInputProps> = ({
       inputsRef.current[lastIndex]?.focus();
       
       // Check if complete
-      if (pastedDigits.length === length) {
-        onComplete(pastedDigits.join(''));
+      const currentMpin = newMpin.join('');
+      if (currentMpin.length === length) {
+        onComplete?.(currentMpin);
+        if (!showSubmitButton) {
+          Keyboard.dismiss();
+        }
       }
       return;
     }
@@ -309,8 +387,10 @@ const MPINInput: React.FC<MPINInputProps> = ({
     // Check if all digits are entered
     const currentMpin = newMpin.join('');
     if (currentMpin.length === length) {
-      onComplete(currentMpin);
-      Keyboard.dismiss();
+      onComplete?.(currentMpin);
+      if (!showSubmitButton) {
+        Keyboard.dismiss();
+      }
     }
   };
 
@@ -318,67 +398,111 @@ const MPINInput: React.FC<MPINInputProps> = ({
     // Handle backspace
     if (e.nativeEvent.key === 'Backspace' && !mpin[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
+      const newMpin = [...mpin];
+      newMpin[index - 1] = '';
+      setMpin(newMpin);
     }
   };
 
   const handleInputFocus = (index: number) => {
-    // Clear the input when focusing if it's not the first empty one
+    // Clear all inputs if user taps on any input
     const firstEmptyIndex = mpin.findIndex(digit => digit === '');
-    if (firstEmptyIndex !== -1 && index > firstEmptyIndex) {
-      inputsRef.current[firstEmptyIndex]?.focus();
+    if (firstEmptyIndex === -1 || index < firstEmptyIndex) {
+      // User is trying to edit previous digits, clear from that point
+      const newMpin = [...mpin];
+      for (let i = index; i < length; i++) {
+        newMpin[i] = '';
+      }
+      setMpin(newMpin);
     }
   };
 
-  const clearMpin = () => {
-    setMpin(Array(length).fill(''));
+  const clearAll = () => {
+    const newMpin = Array(length).fill('');
+    setMpin(newMpin);
     inputsRef.current[0]?.focus();
   };
 
+  const focus = () => {
+    inputsRef.current[0]?.focus();
+  };
+
+  const getCurrentMpin = () => {
+    return mpin.join('');
+  };
+
+  useImperativeHandle(ref, () => ({
+    clearAll,
+    focus,
+    getCurrentMpin: () => mpin.join(''),
+  }));
+
+  const handleSubmit = () => {
+    const currentMpin = mpin.join('');
+    if (currentMpin.length === length) {
+      onSubmit?.(currentMpin);
+      Keyboard.dismiss();
+    }
+  };
+
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <View style={styles.inputsContainer}>
-          {Array.from({ length }).map((_, index) => (
-            <View key={index} style={styles.inputWrapper}>
-              <TextInput
-                ref={ref => {
-                  if (ref) inputsRef.current[index] = ref;
-                }}
-                style={[
-                  styles.input,
-                  error && styles.inputError,
-                  mpin[index] && styles.inputFilled,
-                ]}
-                value={mpin[index]}
-                onChangeText={text => handleChangeText(text, index)}
-                onKeyPress={e => handleKeyPress(e, index)}
-                onFocus={() => handleInputFocus(index)}
-                keyboardType="number-pad"
-                maxLength={index === 0 ? length : 1}
-                secureTextEntry
-                editable={!disabled}
-                selectTextOnFocus
-                autoFocus={index === 0 && autoFocus}
-                contextMenuHidden
-              />
-              {index < length - 1 && <View style={styles.separator} />}
-            </View>
-          ))}
-        </View>
-        
-        {error && (
-          <Text style={styles.errorText}>Invalid MPIN. Please try again.</Text>
-        )}
-        
-        <TouchableWithoutFeedback onPress={clearMpin} disabled={disabled}>
-          <View style={styles.clearButton}>
-            <Text style={styles.clearButtonText}>Clear MPIN</Text>
+    <View style={styles.container}>
+      <View style={styles.inputsContainer}>
+        {Array.from({ length }).map((_, index) => (
+          <View key={index} style={styles.inputWrapper}>
+            <TextInput
+              ref={ref => {
+                if (ref) inputsRef.current[index] = ref;
+              }}
+              style={[
+                styles.input,
+                error && styles.inputError,
+                mpin[index] && styles.inputFilled,
+              ]}
+              value={mpin[index]}
+              onChangeText={text => handleChangeText(text, index)}
+              onKeyPress={e => handleKeyPress(e, index)}
+              onFocus={() => handleInputFocus(index)}
+              keyboardType="number-pad"
+              maxLength={index === 0 ? length : 1}
+              secureTextEntry={secureTextEntry}
+              editable={!disabled}
+              selectTextOnFocus
+              autoFocus={index === 0 && autoFocus}
+              contextMenuHidden
+            />
+            {index < length - 1 && <View style={styles.separator} />}
           </View>
-        </TouchableWithoutFeedback>
+        ))}
       </View>
-    </TouchableWithoutFeedback>
+      
+      {error && (
+        <Text style={styles.errorText}>Invalid MPIN. Please try again.</Text>
+      )}
+      
+      {showSubmitButton && (
+        <TouchableOpacity
+          style={[
+            styles.submitButton,
+            (disabled || mpin.join('').length !== length) && styles.submitButtonDisabled,
+          ]}
+          onPress={handleSubmit}
+          disabled={disabled || mpin.join('').length !== length}
+        >
+          <Text style={styles.submitButtonText}>Submit</Text>
+        </TouchableOpacity>
+      )}
+      
+      <TouchableOpacity
+        style={styles.clearButton}
+        onPress={clearAll}
+        disabled={disabled}
+      >
+        <Text style={styles.clearButtonText}>Clear All</Text>
+      </TouchableOpacity>
+    </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -389,47 +513,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 30,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   input: {
-    width: 44,
-    height: 52,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    fontSize: 20,
+    width: 50,
+    height: 60,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    fontSize: 24,
     fontWeight: '600',
     textAlign: 'center',
-    color: '#1E293B',
+    color: '#1F2937',
     backgroundColor: '#FFFFFF',
   },
   inputFilled: {
-    borderColor: '#C084FC', // Purple
-    backgroundColor: '#FAF5FF',
+    borderColor: '#8B5CF6',
+    backgroundColor: '#F5F3FF',
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: '#EF4444',
     backgroundColor: '#FEF2F2',
   },
   separator: {
-    width: 8,
+    width: 10,
   },
   errorText: {
-    color: '#DC2626',
+    color: '#EF4444',
     fontSize: 14,
     marginTop: 12,
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  submitButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    marginBottom: 16,
+    width: '80%',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   clearButton: {
-    marginTop: 24,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
   },
   clearButtonText: {
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -440,34 +582,44 @@ export default React.memo(MPINInput);
 FILE: src/components/OTPInput.tsx
 ========================================
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   TextInput,
   StyleSheet,
-  TouchableWithoutFeedback,
   Keyboard,
   Text,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
 interface OTPInputProps {
   length?: number;
-  onComplete: (otp: string) => void;
+  onComplete?: (otp: string) => void;
+  onSubmit?: (otp: string) => void;
   error?: boolean;
   disabled?: boolean;
   autoFocus?: boolean;
+  showSubmitButton?: boolean;
 }
 
-const OTPInput: React.FC<OTPInputProps> = ({
+export interface OTPInputRef {
+  clearAll: () => void;
+  focus: () => void;
+  getCurrentOtp: () => string;
+}
+
+const OTPInput = forwardRef<OTPInputRef, OTPInputProps>(({
   length = 6,
   onComplete,
+  onSubmit,
   error = false,
   disabled = false,
   autoFocus = true,
-}) => {
+  showSubmitButton = true,
+}, ref) => {
   const [otp, setOtp] = useState<string[]>(Array(length).fill(''));
   const inputsRef = useRef<TextInput[]>([]);
 
@@ -475,7 +627,7 @@ const OTPInput: React.FC<OTPInputProps> = ({
     if (autoFocus) {
       setTimeout(() => {
         inputsRef.current[0]?.focus();
-      }, 100);
+      }, 300);
     }
   }, [autoFocus]);
 
@@ -499,26 +651,37 @@ const OTPInput: React.FC<OTPInputProps> = ({
       inputsRef.current[lastIndex]?.focus();
       
       // Check if complete
-      if (pastedDigits.length === length) {
-        onComplete(pastedDigits.join(''));
+      const currentOtp = newOtp.join('');
+      if (currentOtp.length === length) {
+        onComplete?.(currentOtp);
+        if (!showSubmitButton) {
+          Keyboard.dismiss();
+        }
       }
       return;
     }
 
     // Single digit input
-    newOtp[index] = text;
-    setOtp(newOtp);
+    // Only update if text is empty or a single digit
+    if (text === '' || /^\d$/.test(text)) {
+      newOtp[index] = text;
+      setOtp(newOtp);
 
-    // Auto-focus next input
-    if (text && index < length - 1) {
-      inputsRef.current[index + 1]?.focus();
-    }
+      // Auto-focus next input
+      if (text && index < length - 1) {
+        setTimeout(() => {
+          inputsRef.current[index + 1]?.focus();
+        }, 10);
+      }
 
-    // Check if all digits are entered
-    const currentOtp = newOtp.join('');
-    if (currentOtp.length === length) {
-      onComplete(currentOtp);
-      Keyboard.dismiss();
+      // Check if all digits are entered
+      const currentOtp = newOtp.join('');
+      if (currentOtp.length === length) {
+        onComplete?.(currentOtp);
+        if (!showSubmitButton) {
+          Keyboard.dismiss();
+        }
+      }
     }
   };
 
@@ -526,65 +689,118 @@ const OTPInput: React.FC<OTPInputProps> = ({
     // Handle backspace
     if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
       inputsRef.current[index - 1]?.focus();
+      const newOtp = [...otp];
+      newOtp[index - 1] = '';
+      setOtp(newOtp);
     }
   };
 
   const handleInputFocus = (index: number) => {
-    // Clear the input when focusing if it's not the first empty one
+    // Only clear if user taps on an input and there are empty digits before this index
     const firstEmptyIndex = otp.findIndex(digit => digit === '');
-    if (firstEmptyIndex !== -1 && index > firstEmptyIndex) {
-      inputsRef.current[firstEmptyIndex]?.focus();
+    
+    if (firstEmptyIndex === -1) {
+      // All digits filled, just move cursor to tapped index
+      return;
+    }
+    
+    if (index < firstEmptyIndex) {
+      // User is trying to edit previous digits, clear from that point
+      const newOtp = [...otp];
+      for (let i = index; i < length; i++) {
+        newOtp[i] = '';
+      }
+      setOtp(newOtp);
     }
   };
 
-  const clearOtp = () => {
-    setOtp(Array(length).fill(''));
+  const clearAll = () => {
+    const newOtp = Array(length).fill('');
+    setOtp(newOtp);
+    setTimeout(() => {
+      inputsRef.current[0]?.focus();
+    }, 10);
+  };
+
+  const focus = () => {
     inputsRef.current[0]?.focus();
   };
 
+  const getCurrentOtp = () => {
+    return otp.join('');
+  };
+
+  useImperativeHandle(ref, () => ({
+    clearAll,
+    focus,
+    getCurrentOtp: () => otp.join(''),
+  }));
+
+  const handleSubmit = () => {
+    const currentOtp = otp.join('');
+    if (currentOtp.length === length) {
+      onSubmit?.(currentOtp);
+      Keyboard.dismiss();
+    }
+  };
+
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <View style={styles.inputsContainer}>
-          {Array.from({ length }).map((_, index) => (
-            <View key={index} style={styles.inputWrapper}>
-              <TextInput
-                ref={ref => {
-                  if (ref) inputsRef.current[index] = ref;
-                }}
-                style={[
-                  styles.input,
-                  error && styles.inputError,
-                  otp[index] && styles.inputFilled,
-                ]}
-                value={otp[index]}
-                onChangeText={text => handleChangeText(text, index)}
-                onKeyPress={e => handleKeyPress(e, index)}
-                onFocus={() => handleInputFocus(index)}
-                keyboardType="number-pad"
-                maxLength={index === 0 ? length : 1}
-                editable={!disabled}
-                selectTextOnFocus
-                autoFocus={index === 0 && autoFocus}
-                contextMenuHidden
-              />
-            </View>
-          ))}
-        </View>
-        
-        {error && (
-          <Text style={styles.errorText}>Invalid OTP. Please try again.</Text>
-        )}
-        
-        <TouchableWithoutFeedback onPress={clearOtp} disabled={disabled}>
-          <View style={styles.clearButton}>
-            <Text style={styles.clearButtonText}>Clear OTP</Text>
+    <View style={styles.container}>
+      <View style={styles.inputsContainer}>
+        {Array.from({ length }).map((_, index) => (
+          <View key={index} style={styles.inputWrapper}>
+            <TextInput
+              ref={ref => {
+                if (ref) inputsRef.current[index] = ref;
+              }}
+              style={[
+                styles.input,
+                error && styles.inputError,
+                otp[index] && styles.inputFilled,
+              ]}
+              value={otp[index]}
+              onChangeText={text => handleChangeText(text, index)}
+              onKeyPress={e => handleKeyPress(e, index)}
+              onFocus={() => handleInputFocus(index)}
+              keyboardType="number-pad"
+              maxLength={1}
+              editable={!disabled}
+              selectTextOnFocus
+              autoFocus={index === 0 && autoFocus}
+              contextMenuHidden
+            />
+            {index < length - 1 && <View style={styles.separator} />}
           </View>
-        </TouchableWithoutFeedback>
+        ))}
       </View>
-    </TouchableWithoutFeedback>
+      
+      {error && (
+        <Text style={styles.errorText}>Invalid OTP. Please try again.</Text>
+      )}
+      
+      {showSubmitButton && (
+        <TouchableOpacity
+          style={[
+            styles.submitButton,
+            (disabled || otp.join('').length !== length) && styles.submitButtonDisabled,
+          ]}
+          onPress={handleSubmit}
+          disabled={disabled || otp.join('').length !== length}
+        >
+          <Text style={styles.submitButtonText}>Submit</Text>
+        </TouchableOpacity>
+      )}
+      
+      <TouchableOpacity
+        style={styles.clearButton}
+        onPress={clearAll}
+        disabled={disabled}
+      >
+        <Text style={styles.clearButtonText}>Clear All</Text>
+      </TouchableOpacity>
+    </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -595,44 +811,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    marginBottom: 30,
   },
   inputWrapper: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   input: {
-    width: 48,
-    height: 56,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    fontSize: 20,
+    width: 50,
+    height: 60,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    fontSize: 24,
     fontWeight: '600',
     textAlign: 'center',
-    color: '#1E293B',
+    color: '#1F2937',
     backgroundColor: '#FFFFFF',
   },
   inputFilled: {
-    borderColor: '#C084FC', // Purple
-    backgroundColor: '#FAF5FF',
+    borderColor: '#8B5CF6',
+    backgroundColor: '#F5F3FF',
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: '#EF4444',
     backgroundColor: '#FEF2F2',
   },
+  separator: {
+    width: 10,
+  },
   errorText: {
-    color: '#DC2626',
+    color: '#EF4444',
     fontSize: 14,
     marginTop: 12,
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  submitButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    marginBottom: 16,
+    width: '80%',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   clearButton: {
-    marginTop: 24,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
   },
   clearButtonText: {
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -1366,14 +1603,14 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
     switch (type) {
       case 'success':
         return {
-          icon: 'check-circle',
+          icon: 'check-circle' as const,
           color: '#10B981',
           bgColor: '#D1FAE5',
           borderColor: '#A7F3D0',
         };
       case 'error':
         return {
-          icon: 'alert-circle',
+          icon: 'alert-circle' as const,
           color: '#EF4444',
           bgColor: '#FEE2E2',
           borderColor: '#FECACA',
@@ -1381,8 +1618,8 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
       case 'info':
       default:
         return {
-          icon: 'information',
-          color: '#C084FC', // Purple
+          icon: 'information' as const,
+          color: '#C084FC',
           bgColor: '#FAF5FF',
           borderColor: '#E9D5FF',
         };
@@ -1411,7 +1648,7 @@ const Toast: React.FC<ToastProps> = ({ type, message, visible, onHide }) => {
     >
       <View style={styles.content}>
         <MaterialCommunityIcons
-          name={config.icon as any}
+          name={config.icon}
           size={20}
           color={config.color}
         />
@@ -1526,12 +1763,16 @@ interface AuthContextType {
   adminInfo: AdminInfo | null;
   tokens: AuthTokens | null;
   phoneNumber: string | null;
+  adminId: string | null;
   loginFlow: LoginFlowState | null;
   login: (phone: string, tokens: AuthTokens, adminInfo: AdminInfo) => Promise<void>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<boolean>;
   updateAdminInfo: (info: Partial<AdminInfo>) => void;
   checkExistingSession: () => Promise<void>;
+  storePhoneNumber: (phone: string, adminId?: string) => Promise<void>;
+  clearPhoneNumber: () => Promise<void>;
+  validateSession: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -1551,70 +1792,178 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [adminInfo, setAdminInfo] = useState<AdminInfo | null>(null);
   const [tokens, setTokens] = useState<AuthTokens | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
+  const [adminId, setAdminId] = useState<string | null>(null);
   const [loginFlow, setLoginFlow] = useState<LoginFlowState | null>(null);
   const queryClient = useQueryClient();
 
+  const validateSession = useCallback(async (): Promise<boolean> => {
+    try {
+      console.log('🔍 Validating session...');
+      const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      
+      if (!accessToken) {
+        console.log('❌ No access token found for validation');
+        return false;
+      }
+
+      const response = await api.validateSession();
+      const { valid } = response.data.data;
+      
+      console.log('✅ Session validation result:', valid);
+      return valid;
+    } catch (error: any) {
+      console.error('❌ Session validation error:', error.response?.data || error.message);
+      return false;
+    }
+  }, []);
+
+  const storePhoneNumber = useCallback(async (phone: string, adminId?: string) => {
+    try {
+      console.log('🔐 Storing phone number:', phone, 'adminId:', adminId);
+      
+      // Store full phone number without spaces in format +919876543210
+      const formattedPhone = phone.replace(/\s/g, '');
+      await setItem(STORAGE_KEYS.PHONE_NUMBER, formattedPhone);
+      
+      if (adminId) {
+        await setItem(STORAGE_KEYS.ADMIN_ID, adminId);
+        setAdminId(adminId);
+      }
+      
+      setPhoneNumber(formattedPhone);
+      console.log('✅ Phone number stored successfully:', formattedPhone);
+    } catch (error) {
+      console.error('❌ Error storing phone number:', error);
+    }
+  }, []);
+
+  const clearPhoneNumber = useCallback(async () => {
+    try {
+      await removeItem(STORAGE_KEYS.PHONE_NUMBER);
+      await removeItem(STORAGE_KEYS.ADMIN_ID);
+      setPhoneNumber(null);
+      setAdminId(null);
+      console.log('✅ Phone number cleared');
+    } catch (error) {
+      console.error('❌ Error clearing phone number:', error);
+    }
+  }, []);
+
   const initializeAuth = useCallback(async () => {
     try {
+      console.log('🔄 Initializing authentication...');
       setIsInitializing(true);
+      setIsLoading(true);
       
+      // Check if we have stored phone number
       const hasPhone = await hasStoredPhoneNumber();
       const formattedPhone = await getFormattedPhoneNumber();
+      
+      console.log('📱 Stored phone check:', { 
+        hasPhone, 
+        formattedPhone,
+        phoneNumber: await getItem(STORAGE_KEYS.PHONE_NUMBER),
+        adminId: await getItem(STORAGE_KEYS.ADMIN_ID)
+      });
       
       if (hasPhone && formattedPhone) {
         setPhoneNumber(formattedPhone);
         
+        const storedAdminId = await getItem(STORAGE_KEYS.ADMIN_ID);
+        if (storedAdminId) {
+          setAdminId(storedAdminId);
+        }
+        
+        // Check for session data
         const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
         const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
         const storedAdminInfo = await getItem(STORAGE_KEYS.ADMIN_INFO);
         
+        console.log('🔍 Checking stored session data:', {
+          hasAccessToken: !!accessToken,
+          hasRefreshToken: !!refreshToken,
+          hasAdminInfo: !!storedAdminInfo,
+          accessTokenLength: accessToken?.length || 0,
+          refreshTokenLength: refreshToken?.length || 0
+        });
+        
+        // If we have all required tokens and admin info, validate session
         if (accessToken && refreshToken && storedAdminInfo) {
-          const adminInfoData = JSON.parse(storedAdminInfo);
-          const tokensData: AuthTokens = {
-            access_token: accessToken,
-            refresh_token: refreshToken,
-            expires_in: 900,
-            token_type: 'Bearer'
-          };
+          console.log('🔐 Found stored session, validating...');
           
-          setAdminInfo(adminInfoData);
-          setTokens(tokensData);
-          setIsAuthenticated(true);
-          
-          startTokenRefresh();
+          try {
+            const adminInfoData = JSON.parse(storedAdminInfo);
+            const tokensData: AuthTokens = {
+              access_token: accessToken,
+              refresh_token: refreshToken,
+              expires_in: 900,
+              token_type: 'Bearer'
+            };
+            
+            // Set state first
+            setAdminInfo(adminInfoData);
+            setTokens(tokensData);
+            setIsAuthenticated(true);
+            
+            // Start token refresh
+            startTokenRefresh();
+            console.log('✅ Authentication restored successfully');
+          } catch (error) {
+            console.error('❌ Error parsing stored data:', error);
+            await clearSessionData();
+            setAdminInfo(null);
+            setTokens(null);
+            setIsAuthenticated(false);
+          }
+        } else {
+          // Missing required data, not authenticated
+          console.log('❌ Missing authentication data');
+          setIsAuthenticated(false);
         }
+      } else {
+        // No phone number stored
+        console.log('❌ No phone number stored in permanent storage');
+        setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('Auth initialization error:', error);
-      await clearSessionData();
+      console.error('❌ Auth initialization error:', error);
+      setIsAuthenticated(false);
     } finally {
+      console.log('✅ Auth initialization complete');
       setIsLoading(false);
       setIsInitializing(false);
     }
   }, []);
 
   useEffect(() => {
+    console.log('🚀 AuthProvider mounted, initializing auth...');
     initializeAuth();
   }, [initializeAuth]);
 
   const startTokenRefresh = useCallback(() => {
+    console.log('🔄 Starting token refresh interval');
     const refreshInterval = setInterval(async () => {
       try {
+        console.log('🔄 Refreshing token...');
         const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
         if (refreshToken) {
           const response = await api.refreshToken(refreshToken);
           const newTokens = response.data;
           
-          await setItem(STORAGE_KEYS.ACCESS_TOKEN, newTokens.access_token);
-          await setItem(STORAGE_KEYS.REFRESH_TOKEN, newTokens.refresh_token);
+          if (newTokens?.access_token) {
+            await setItem(STORAGE_KEYS.ACCESS_TOKEN, newTokens.access_token);
+          }
+          if (newTokens?.refresh_token) {
+            await setItem(STORAGE_KEYS.REFRESH_TOKEN, newTokens.refresh_token);
+          }
           
           setTokens(newTokens);
+          console.log('✅ Token refreshed successfully');
         }
       } catch (error) {
-        console.error('Token refresh failed:', error);
-        await logout();
+        console.error('❌ Token refresh failed:', error);
       }
-    }, 4.5 * 60 * 1000);
+    }, 4.5 * 60 * 1000); // Refresh every 4.5 minutes
 
     return () => clearInterval(refreshInterval);
   }, []);
@@ -1625,79 +1974,137 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     adminInfoData: AdminInfo
   ) => {
     try {
-      const phoneWithoutCountryCode = phone.replace('+91', '');
-      await setItem(STORAGE_KEYS.PHONE_NUMBER, phoneWithoutCountryCode);
-      await setItem(STORAGE_KEYS.COUNTRY_CODE, '+91');
+      console.log('🔐 Login attempt for phone:', phone);
+      
+      // Validate tokens before storing
+      if (!tokensData?.access_token || !tokensData?.refresh_token) {
+        console.error('❌ Invalid tokens received:', tokensData);
+        throw new Error('Invalid tokens received');
+      }
+
+      console.log('📝 Storing tokens and admin info...');
+      console.log('🔐 Access Token (first 20 chars):', tokensData.access_token.substring(0, 20));
+      console.log('🔐 Refresh Token (first 20 chars):', tokensData.refresh_token.substring(0, 20));
+      console.log('👤 Admin ID:', adminInfoData.admin_id);
+      
+      // Store tokens and admin info
       await setItem(STORAGE_KEYS.ACCESS_TOKEN, tokensData.access_token);
       await setItem(STORAGE_KEYS.REFRESH_TOKEN, tokensData.refresh_token);
       await setItem(STORAGE_KEYS.ADMIN_INFO, JSON.stringify(adminInfoData));
-      await setItem(STORAGE_KEYS.ADMIN_ID, adminInfoData.admin_id);
+      
+      if (adminInfoData?.admin_id) {
+        await setItem(STORAGE_KEYS.ADMIN_ID, adminInfoData.admin_id);
+      }
 
-      setPhoneNumber(phone);
+      // Store phone number permanently without spaces
+      await storePhoneNumber(phone, adminInfoData.admin_id);
+
+      // Verify storage
+      const storedAccessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      const storedRefreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      const storedAdminInfo = await getItem(STORAGE_KEYS.ADMIN_INFO);
+      
+      console.log('✅ Storage verification:', {
+        accessTokenStored: !!storedAccessToken,
+        refreshTokenStored: !!storedRefreshToken,
+        adminInfoStored: !!storedAdminInfo,
+        accessTokenLength: storedAccessToken?.length || 0,
+        refreshTokenLength: storedRefreshToken?.length || 0
+      });
+
+      // Set state WITHOUT validating session immediately
+      setPhoneNumber(phone.replace(/\s/g, ''));
       setTokens(tokensData);
       setAdminInfo(adminInfoData);
+      setAdminId(adminInfoData.admin_id);
       setIsAuthenticated(true);
 
       startTokenRefresh();
+      console.log('✅ Login successful');
+      
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       throw error;
     }
-  }, [startTokenRefresh]);
+  }, [storePhoneNumber, startTokenRefresh]);
 
   const logout = useCallback(async () => {
+    console.log('🚪 Logging out...');
     try {
       const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
       if (refreshToken) {
+        console.log('📡 Calling logout API...');
         await api.logout(refreshToken);
       }
     } catch (error) {
-      console.error('Logout API error:', error);
+      console.error('❌ Logout API error:', error);
     } finally {
+      console.log('🧹 Clearing session data...');
       await clearSessionData();
       queryClient.clear();
+      
+      // Reset all state except phone number
       setIsAuthenticated(false);
       setAdminInfo(null);
       setTokens(null);
       setLoginFlow(null);
+      
+      // Keep phoneNumber and adminId for next login
+      console.log('✅ Logout complete - Phone number preserved');
     }
   }, [queryClient]);
 
   const refreshAuth = useCallback(async (): Promise<boolean> => {
     try {
+      console.log('🔄 Refreshing authentication...');
       const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      if (!refreshToken) return false;
+      if (!refreshToken) {
+        console.log('❌ No refresh token found');
+        return false;
+      }
 
       const response = await api.refreshToken(refreshToken);
       const newTokens = response.data;
       
+      // Validate new tokens
+      if (!newTokens?.access_token || !newTokens?.refresh_token) {
+        console.error('❌ Invalid tokens received from refresh');
+        return false;
+      }
+      
+      console.log('📝 Storing refreshed tokens...');
       await setItem(STORAGE_KEYS.ACCESS_TOKEN, newTokens.access_token);
       await setItem(STORAGE_KEYS.REFRESH_TOKEN, newTokens.refresh_token);
       
       setTokens(newTokens);
+      console.log('✅ Auth refresh successful');
       return true;
     } catch (error) {
-      console.error('Auth refresh failed:', error);
-      await logout();
+      console.error('❌ Auth refresh failed:', error);
       return false;
     }
-  }, [logout]);
+  }, []);
 
   const updateAdminInfo = useCallback((info: Partial<AdminInfo>) => {
     setAdminInfo((prev: AdminInfo | null) => prev ? { ...prev, ...info } : null);
     
     if (adminInfo) {
       const updatedInfo = { ...adminInfo, ...info };
-      setItem(STORAGE_KEYS.ADMIN_INFO, JSON.stringify(updatedInfo));
+      setItem(STORAGE_KEYS.ADMIN_INFO, JSON.stringify(updatedInfo)).catch(console.error);
     }
   }, [adminInfo]);
 
   const checkExistingSession = useCallback(async () => {
     try {
+      console.log('🔍 Checking existing session...');
       const formattedPhone = await getFormattedPhoneNumber();
-      if (!formattedPhone) return;
+      if (!formattedPhone) {
+        console.log('❌ No phone number to check session');
+        return;
+      }
 
       const response = await api.loginInitiate(formattedPhone);
+      console.log('📱 Login initiate response:', response.data);
       
       if (response.data.success) {
         const { user_exists, has_mpin, mpin_locked, device_trusted } = response.data.data;
@@ -1713,7 +2120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (error) {
-      console.error('Session check error:', error);
+      console.error('❌ Session check error:', error);
     }
   }, []);
 
@@ -1724,12 +2131,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     adminInfo,
     tokens,
     phoneNumber,
+    adminId,
     loginFlow,
     login,
     logout,
     refreshAuth,
     updateAdminInfo,
     checkExistingSession,
+    storePhoneNumber,
+    clearPhoneNumber,
+    validateSession,
   };
 
   return (
@@ -1782,9 +2193,11 @@ export const QueryProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 FILE: src/navigation/AppNavigator.tsx
 ========================================
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '@/contexts/AuthContext';
+import { View, ActivityIndicator } from 'react-native';
+import { CommonActions, NavigationContainerRef } from '@react-navigation/native';
 
 // Screens
 import LoginInitiateScreen from '@/screens/auth/LoginInitiateScreen';
@@ -1800,36 +2213,203 @@ import DepartmentScreen from '@/screens/dashboard/DepartmentScreen';
 
 const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+// Create a navigation ref
+export const navigationRef = React.createRef<NavigationContainerRef<any>>();
 
-  // Show loading screen
-  if (isLoading) {
-    return null; // Or a simple loading component
+// Define all screen names as constants to avoid typos
+const SCREENS = {
+  LOGIN_INITIATE: 'LoginInitiate',
+  SEND_OTP: 'SendOTP',
+  VERIFY_OTP: 'VerifyOTP',
+  SETUP_MPIN: 'SetupMPIN',
+  VERIFY_MPIN: 'VerifyMPIN',
+  FORGOT_MPIN: 'ForgotMPIN',
+  MAIN_DASHBOARD: 'MainDashboard',
+  PROFILE: 'Profile',
+  CHANGE_MPIN: 'ChangeMPIN',
+  DEPARTMENT: 'Department',
+};
+
+const RootStack = () => {
+  const { isAuthenticated, isLoading, isInitializing, phoneNumber } = useAuth();
+
+  console.log('🔄 AppNavigator State:', {
+    isAuthenticated,
+    isLoading,
+    isInitializing,
+    phoneNumber,
+    hasPhone: !!phoneNumber
+  });
+
+  // Show loading screen with proper component
+  if (isLoading || isInitializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+        <ActivityIndicator size="large" color="#C084FC" />
+      </View>
+    );
   }
 
+  // Determine initial route based on authentication state
+  let initialRouteName = SCREENS.LOGIN_INITIATE;
+  
+  if (isAuthenticated) {
+    initialRouteName = SCREENS.MAIN_DASHBOARD;
+  } else if (phoneNumber) {
+    // If we have phone number but not authenticated, go to MPIN verification
+    initialRouteName = SCREENS.VERIFY_MPIN;
+  }
+
+  console.log('📍 Initial Route:', initialRouteName);
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!isAuthenticated ? (
-        <>
-          <Stack.Screen name="LoginInitiate" component={LoginInitiateScreen} />
-          <Stack.Screen name="SendOTP" component={SendOTPScreen} />
-          <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
-          <Stack.Screen name="SetupMPIN" component={SetupMPINScreen} />
-          <Stack.Screen name="VerifyMPIN" component={VerifyMPINScreen} />
-          <Stack.Screen name="ForgotMPIN" component={ForgotMPINScreen} />
-        </>
-      ) : (
-        <>
-          <Stack.Screen name="MainDashboard" component={MainDashboardScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen name="ChangeMPIN" component={ChangeMPINScreen} />
-          <Stack.Screen name="Department" component={DepartmentScreen} />
-        </>
-      )}
+    <Stack.Navigator 
+      screenOptions={{ headerShown: false }}
+      initialRouteName={initialRouteName}
+    >
+      {/* Auth Screens */}
+      <Stack.Screen name={SCREENS.LOGIN_INITIATE} component={LoginInitiateScreen} />
+      <Stack.Screen name={SCREENS.SEND_OTP} component={SendOTPScreen} />
+      <Stack.Screen name={SCREENS.VERIFY_OTP} component={VerifyOTPScreen} />
+      <Stack.Screen name={SCREENS.SETUP_MPIN} component={SetupMPINScreen} />
+      <Stack.Screen name={SCREENS.VERIFY_MPIN} component={VerifyMPINScreen} />
+      <Stack.Screen name={SCREENS.FORGOT_MPIN} component={ForgotMPINScreen} />
+      
+      {/* Main App Screens */}
+      <Stack.Screen name={SCREENS.MAIN_DASHBOARD} component={MainDashboardScreen} />
+      <Stack.Screen name={SCREENS.PROFILE} component={ProfileScreen} />
+      <Stack.Screen name={SCREENS.CHANGE_MPIN} component={ChangeMPINScreen} />
+      <Stack.Screen name={SCREENS.DEPARTMENT} component={DepartmentScreen} />
     </Stack.Navigator>
   );
-}
+};
+
+export default RootStack;
+// import React, { useEffect, useRef } from 'react';
+// import { createNativeStackNavigator } from '@react-navigation/native-stack';
+// import { useAuth } from '@/contexts/AuthContext';
+// import { View, ActivityIndicator } from 'react-native';
+// import { CommonActions, NavigationContainerRef } from '@react-navigation/native';
+
+// // Screens
+// import LoginInitiateScreen from '@/screens/auth/LoginInitiateScreen';
+// import SendOTPScreen from '@/screens/auth/SendOTPScreen';
+// import VerifyOTPScreen from '@/screens/auth/VerifyOTPScreen';
+// import SetupMPINScreen from '@/screens/auth/SetupMPINScreen';
+// import VerifyMPINScreen from '@/screens/auth/VerifyMPINScreen';
+// import ForgotMPINScreen from '@/screens/auth/ForgotMPINScreen';
+// import MainDashboardScreen from '@/screens/dashboard/MainDashboardScreen';
+// import ProfileScreen from '@/screens/profile/ProfileScreen';
+// import ChangeMPINScreen from '@/screens/profile/ChangeMPINScreen';
+// import DepartmentScreen from '@/screens/dashboard/DepartmentScreen';
+
+// const Stack = createNativeStackNavigator();
+
+// // Create a navigation ref
+// export const navigationRef = React.createRef<NavigationContainerRef<any>>();
+
+// // Define all screen names as constants to avoid typos
+// const SCREENS = {
+//   LOGIN_INITIATE: 'LoginInitiate',
+//   SEND_OTP: 'SendOTP',
+//   VERIFY_OTP: 'VerifyOTP',
+//   SETUP_MPIN: 'SetupMPIN',
+//   VERIFY_MPIN: 'VerifyMPIN',
+//   FORGOT_MPIN: 'ForgotMPIN',
+//   MAIN_DASHBOARD: 'MainDashboard',
+//   PROFILE: 'Profile',
+//   CHANGE_MPIN: 'ChangeMPIN',
+//   DEPARTMENT: 'Department',
+// };
+
+// const RootStack = () => {
+//   const { isAuthenticated, isLoading, isInitializing, phoneNumber, validateSession } = useAuth();
+//   const initialRouteChecked = useRef(false);
+
+//   console.log('🔄 AppNavigator State:', {
+//     isAuthenticated,
+//     isLoading,
+//     isInitializing,
+//     phoneNumber,
+//     hasPhone: !!phoneNumber
+//   });
+
+//   // Validate session when app starts or when authentication state changes
+//   useEffect(() => {
+//     const checkSessionAndNavigate = async () => {
+//       if (isAuthenticated && !isLoading && !isInitializing) {
+//         try {
+//           console.log('🔍 Validating session on app start...');
+//           const isValid = await validateSession();
+          
+//           if (!isValid) {
+//             console.log('❌ Session invalid on app start, forcing logout');
+//             // We'll handle this in the AuthContext, but reset navigation
+//             if (navigationRef.current) {
+//               navigationRef.current.dispatch(
+//                 CommonActions.reset({
+//                   index: 0,
+//                   routes: [{ name: SCREENS.VERIFY_MPIN }],
+//                 })
+//               );
+//             }
+//           }
+//         } catch (error) {
+//           console.error('❌ Session validation error on app start:', error);
+//         }
+//       }
+//     };
+
+//     if (!initialRouteChecked.current) {
+//       initialRouteChecked.current = true;
+//       checkSessionAndNavigate();
+//     }
+//   }, [isAuthenticated, isLoading, isInitializing, validateSession]);
+
+//   // Show loading screen with proper component
+//   if (isLoading || isInitializing) {
+//     return (
+//       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+//         <ActivityIndicator size="large" color="#C084FC" />
+//       </View>
+//     );
+//   }
+
+//   // Determine initial route based on authentication state
+//   let initialRouteName = SCREENS.LOGIN_INITIATE;
+  
+//   if (isAuthenticated) {
+//     initialRouteName = SCREENS.MAIN_DASHBOARD;
+//   } else if (phoneNumber) {
+//     // If we have phone number but not authenticated, go to MPIN verification
+//     initialRouteName = SCREENS.VERIFY_MPIN;
+//   }
+
+//   console.log('📍 Initial Route:', initialRouteName);
+
+//   return (
+//     <Stack.Navigator 
+//       screenOptions={{ headerShown: false }}
+//       initialRouteName={initialRouteName}
+//     >
+//       {/* Auth Screens */}
+//       <Stack.Screen name={SCREENS.LOGIN_INITIATE} component={LoginInitiateScreen} />
+//       <Stack.Screen name={SCREENS.SEND_OTP} component={SendOTPScreen} />
+//       <Stack.Screen name={SCREENS.VERIFY_OTP} component={VerifyOTPScreen} />
+//       <Stack.Screen name={SCREENS.SETUP_MPIN} component={SetupMPINScreen} />
+//       <Stack.Screen name={SCREENS.VERIFY_MPIN} component={VerifyMPINScreen} />
+//       <Stack.Screen name={SCREENS.FORGOT_MPIN} component={ForgotMPINScreen} />
+      
+//       {/* Main App Screens */}
+//       <Stack.Screen name={SCREENS.MAIN_DASHBOARD} component={MainDashboardScreen} />
+//       <Stack.Screen name={SCREENS.PROFILE} component={ProfileScreen} />
+//       <Stack.Screen name={SCREENS.CHANGE_MPIN} component={ChangeMPINScreen} />
+//       <Stack.Screen name={SCREENS.DEPARTMENT} component={DepartmentScreen} />
+//     </Stack.Navigator>
+//   );
+// };
+
+// export default RootStack;
 ========================================
 FILE: src/screens/AnimatedPrayantraLogo.tsx
 ========================================
@@ -3788,15 +4368,14 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, NavigationProp, RouteProp, useRoute } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import { STORAGE_KEYS } from '@/services/storage';
 
-// Define navigation types
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -3804,7 +4383,7 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
 };
 
 type SendOTPScreenRouteProp = RouteProp<RootStackParamList, 'SendOTP'>;
@@ -3815,13 +4394,19 @@ const SendOTPScreen = () => {
   const { phoneNumber, adminId } = route.params;
   const { showToast } = useToast();
 
-  const [timer, setTimer] = useState(60);
-  const [canResend, setCanResend] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0); // Start at 0, will set after first send
+  const [isLoading, setIsLoading] = useState(true); // Start loading to auto-send OTP
+  const [hasSentInitialOTP, setHasSentInitialOTP] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    startTimer();
+    console.log('📱 SendOTPScreen mounted, auto-sending OTP to:', phoneNumber);
+    
+    // Auto-send OTP when screen loads
+    if (!hasSentInitialOTP) {
+      handleSendOTP();
+    }
+    
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -3829,18 +4414,16 @@ const SendOTPScreen = () => {
     };
   }, []);
 
-  const startTimer = () => {
-    setCanResend(false);
-    setTimer(60);
+  const startTimer = (seconds: number = 60) => {
+    setResendCooldown(seconds);
     
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
 
     timerRef.current = setInterval(() => {
-      setTimer((prev) => {
+      setResendCooldown((prev) => {
         if (prev <= 1) {
-          setCanResend(true);
           if (timerRef.current) {
             clearInterval(timerRef.current);
           }
@@ -3854,16 +4437,19 @@ const SendOTPScreen = () => {
   const sendOTPMutation = useMutation({
     mutationFn: () => api.sendOTP(phoneNumber, 'admin_login'),
     onSuccess: (response) => {
+      console.log('✅ OTP sent successfully:', response.data);
       showToast('success', 'OTP sent successfully to your phone');
-      startTimer(); // Reset timer after successful send
+      startTimer(60);
+      setHasSentInitialOTP(true);
+      setIsLoading(false);
     },
     onError: (error: any) => {
+      console.error('❌ OTP send error:', error.response?.data);
       const errorMessage = error.response?.data?.message || 'Failed to send OTP';
       
       if (error.response?.status === 429) {
-        const retryAfter = error.response.data?.retry_after || 30;
-        setTimer(retryAfter);
-        setCanResend(false);
+        const retryAfter = error.response.data?.retry_after || 60;
+        startTimer(retryAfter);
         showToast('error', `Too many requests. Please wait ${retryAfter} seconds`);
       } else if (error.response?.status === 500 && error.response.data?.error === 'phone number not registered') {
         Alert.alert(
@@ -3874,22 +4460,22 @@ const SendOTPScreen = () => {
       } else {
         showToast('error', errorMessage);
       }
-    },
-    onSettled: () => {
       setIsLoading(false);
     },
   });
 
   const handleSendOTP = () => {
-    if (!canResend && timer > 0) {
-      showToast('info', `Please wait ${timer} seconds before resending`);
+    if (resendCooldown > 0 && !isLoading) {
+      showToast('info', `Please wait ${resendCooldown} seconds before resending`);
       return;
     }
     setIsLoading(true);
+    console.log('📡 Sending OTP to:', phoneNumber);
     sendOTPMutation.mutate();
   };
 
   const handleVerifyOTP = () => {
+    console.log('➡️ Navigating to VerifyOTP with phone:', phoneNumber);
     navigation.navigate('VerifyOTP', { phoneNumber, adminId });
   };
 
@@ -3900,11 +4486,13 @@ const SendOTPScreen = () => {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -3914,7 +4502,7 @@ const SendOTPScreen = () => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Verify Device</Text>
           <Text style={styles.subtitle}>
-            We've sent a 6-digit OTP to your registered phone number
+            {isLoading ? 'Sending OTP...' : 'We\'ve sent a 6-digit OTP to your registered phone number'}
           </Text>
 
           <View style={styles.phoneContainer}>
@@ -3927,11 +4515,13 @@ const SendOTPScreen = () => {
           </Text>
 
           <TouchableOpacity
-            style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
+            style={[styles.verifyButton, (!hasSentInitialOTP || isLoading) && styles.buttonDisabled]}
             onPress={handleVerifyOTP}
-            disabled={isLoading}
+            disabled={!hasSentInitialOTP || isLoading}
           >
-            <Text style={styles.verifyButtonText}>Enter OTP</Text>
+            <Text style={styles.verifyButtonText}>
+              {!hasSentInitialOTP ? 'Sending OTP...' : 'Enter OTP'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.resendContainer}>
@@ -3940,13 +4530,14 @@ const SendOTPScreen = () => {
             </Text>
             <TouchableOpacity
               onPress={handleSendOTP}
-              disabled={!canResend || isLoading}
+              disabled={isLoading || resendCooldown > 0}
             >
               <Text style={[
                 styles.resendButton,
-                (!canResend || isLoading) && styles.resendButtonDisabled
+                (isLoading || resendCooldown > 0) && styles.resendButtonDisabled
               ]}>
-                {canResend ? 'Resend OTP' : `Resend in ${timer}s`}
+                {isLoading ? 'Sending...' : 
+                 resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -3971,6 +4562,7 @@ const SendOTPScreen = () => {
               • OTP is valid for 10 minutes
               {'\n'}• Never share OTP with anyone
               {'\n'}• This OTP is for device verification only
+              {'\n'}• Rate limit applies for OTP resend
             </Text>
           </View>
         </View>
@@ -3997,7 +4589,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     marginTop: 12,
   },
   formContainer: {
@@ -4051,14 +4643,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   verifyButton: {
-    backgroundColor: '#C084FC', // Purple
+    backgroundColor: '#C084FC',
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 20,
   },
   buttonDisabled: {
-    backgroundColor: '#D8B4FE', // Light purple
+    backgroundColor: '#D8B4FE',
   },
   verifyButtonText: {
     color: '#FFFFFF',
@@ -4078,11 +4670,11 @@ const styles = StyleSheet.create({
   },
   resendButton: {
     fontSize: 14,
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     fontWeight: '600',
   },
   resendButtonDisabled: {
-    color: '#D8B4FE', // Light purple
+    color: '#D8B4FE',
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
@@ -4101,14 +4693,14 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   backButton: {
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 24,
   },
   securityInfo: {
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#FAF5FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
@@ -4117,7 +4709,7 @@ const styles = StyleSheet.create({
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     marginBottom: 8,
   },
   securityText: {
@@ -4132,7 +4724,7 @@ export default SendOTPScreen;
 FILE: src/screens/auth/SetupMPINScreen.tsx
 ========================================
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -4142,6 +4734,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, NavigationProp, RouteProp, useRoute } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -4149,9 +4742,8 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import MPINInput from '@/components/MPINInput';
+import MPINInput, { MPINInputRef } from '@/components/MPINInput';
 
-// Define navigation types
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -4159,7 +4751,10 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type SetupMPINScreenRouteProp = RouteProp<RootStackParamList, 'SetupMPIN'>;
@@ -4169,14 +4764,36 @@ const SetupMPINScreen = () => {
   const route = useRoute<SetupMPINScreenRouteProp>();
   const { phoneNumber, adminId } = route.params;
   
-  const { login } = useAuth();
+  const { login, storePhoneNumber } = useAuth();
   const { showToast } = useToast();
 
   const [mpin, setMpin] = useState('');
   const [confirmMpin, setConfirmMpin] = useState('');
-  const [step, setStep] = useState(1); // 1: Enter MPIN, 2: Confirm MPIN
+  const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const mpinInputRef = useRef<MPINInputRef>(null);
+
+  React.useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   const setupMPINMutation = useMutation({
     mutationFn: (mpin: string) => api.setupMPIN(adminId, mpin),
@@ -4185,11 +4802,15 @@ const SetupMPINScreen = () => {
       api.verifyMPIN(phoneNumber, mpin)
         .then(verifyResponse => {
           const { admin, tokens, message } = verifyResponse.data.data;
+          // Store phone number permanently
+          storePhoneNumber(phoneNumber, admin.admin_id);
           login(phoneNumber, tokens, admin);
           showToast('success', message || 'MPIN setup successful');
         })
         .catch(error => {
-          showToast('error', 'MPIN setup successful. Please login with your MPIN.');
+          // If verification fails, still store phone number and redirect to verify MPIN
+          showToast('success', 'MPIN setup successful. Please login with your MPIN.');
+          storePhoneNumber(phoneNumber, adminId);
           navigation.navigate('VerifyMPIN', { phoneNumber });
         });
     },
@@ -4208,11 +4829,13 @@ const SetupMPINScreen = () => {
         setStep(1);
         setMpin('');
         setConfirmMpin('');
+        mpinInputRef.current?.clearAll();
       } else {
         showToast('error', errorMessage);
         setStep(1);
         setMpin('');
         setConfirmMpin('');
+        mpinInputRef.current?.clearAll();
       }
     },
     onSettled: () => {
@@ -4220,22 +4843,18 @@ const SetupMPINScreen = () => {
     },
   });
 
-  const handleMPINComplete = (enteredMpin: string) => {
+  const handleMPINSubmit = (enteredMpin: string) => {
     if (step === 1) {
       // Validate MPIN strength
-      if (enteredMpin === '111111' || enteredMpin === '123456' || enteredMpin === '000000') {
+      if (isWeakMpin(enteredMpin)) {
         setError('MPIN is too common. Please choose a stronger MPIN.');
-        return;
-      }
-
-      if (enteredMpin.split('').every((digit, i, arr) => digit === arr[0])) {
-        setError('MPIN cannot have all same digits');
         return;
       }
 
       setMpin(enteredMpin);
       setError('');
       setStep(2);
+      mpinInputRef.current?.clearAll();
     } else {
       setConfirmMpin(enteredMpin);
       
@@ -4245,13 +4864,7 @@ const SetupMPINScreen = () => {
       } else {
         setError('MPIN does not match. Please try again.');
         setConfirmMpin('');
-        // Optional: Auto go back to step 1
-        setTimeout(() => {
-          setStep(1);
-          setMpin('');
-          setConfirmMpin('');
-          setError('');
-        }, 1000);
+        mpinInputRef.current?.clearAll();
       }
     }
   };
@@ -4261,6 +4874,7 @@ const SetupMPINScreen = () => {
       setStep(1);
       setConfirmMpin('');
       setError('');
+      mpinInputRef.current?.clearAll();
     } else {
       navigation.goBack();
     }
@@ -4279,11 +4893,16 @@ const SetupMPINScreen = () => {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 }
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -4313,10 +4932,13 @@ const SetupMPINScreen = () => {
 
           <View style={styles.mpinContainer}>
             <MPINInput
-              onComplete={handleMPINComplete}
+              ref={mpinInputRef}
+              onSubmit={handleMPINSubmit}
               error={!!error}
               disabled={isLoading}
               autoFocus={true}
+              showSubmitButton={true}
+              secureTextEntry={true}
             />
           </View>
 
@@ -4346,13 +4968,13 @@ const SetupMPINScreen = () => {
             </View>
           )}
 
-          {isLoading && (
+          {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>
                 {step === 2 ? 'Setting up MPIN...' : 'Processing...'}
               </Text>
             </View>
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={styles.backButton}
@@ -4387,8 +5009,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 60,
   },
   logoContainer: {
     alignItems: 'center',
@@ -4397,7 +5018,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginTop: 12,
   },
   formContainer: {
@@ -4413,13 +5034,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -4433,17 +5054,17 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeStep: {
-    backgroundColor: '#C084FC', // Purple
+    backgroundColor: '#8B5CF6',
   },
   stepText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#6B7280',
   },
   activeStepText: {
     color: '#FFFFFF',
@@ -4451,7 +5072,7 @@ const styles = StyleSheet.create({
   stepLine: {
     width: 40,
     height: 2,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E5E7EB',
     marginHorizontal: 8,
   },
   mpinContainer: {
@@ -4466,27 +5087,27 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   errorText: {
-    color: '#DC2626',
+    color: '#EF4444',
     fontSize: 14,
     textAlign: 'center',
   },
   guidelinesContainer: {
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   guidelinesTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   guideline: {
     fontSize: 13,
-    color: '#6B21A8',
+    color: '#6D28D9',
     marginBottom: 4,
     lineHeight: 18,
   },
@@ -4494,7 +5115,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loadingText: {
-    color: '#64748B',
+    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },
@@ -4503,27 +5124,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
   },
   securityInfo: {
     marginTop: 32,
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   securityText: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#6D28D9',
     lineHeight: 18,
   },
 });
@@ -4533,7 +5154,7 @@ export default SetupMPINScreen;
 FILE: src/screens/auth/VerifyMPINScreen.tsx
 ========================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -4543,6 +5164,8 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, NavigationProp, useRoute, RouteProp } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -4550,10 +5173,11 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import MPINInput from '@/components/MPINInput';
+import MPINInput, { MPINInputRef } from '@/components/MPINInput';
 import { getFormattedPhoneNumber } from '@/services/storage';
 
-// Define navigation types
+const { height } = Dimensions.get('window');
+
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -4561,7 +5185,10 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type VerifyMPINScreenRouteProp = RouteProp<RootStackParamList, 'VerifyMPIN'>;
@@ -4571,15 +5198,19 @@ const VerifyMPINScreen = () => {
   const route = useRoute<VerifyMPINScreenRouteProp>();
   const params = route.params;
   
-  const { login } = useAuth();
+  const { login, clearPhoneNumber } = useAuth();
   const { showToast } = useToast();
   
   const [mpin, setMpin] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [attemptCount, setAttemptCount] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockTime, setLockTime] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const mpinInputRef = useRef<MPINInputRef>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     const loadPhoneNumber = async () => {
@@ -4593,6 +5224,27 @@ const VerifyMPINScreen = () => {
       }
     };
     loadPhoneNumber();
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: 100, animated: true });
+        }, 100);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
   }, [params?.phoneNumber]);
 
   useEffect(() => {
@@ -4614,20 +5266,56 @@ const VerifyMPINScreen = () => {
   const mutation = useMutation({
     mutationFn: (mpin: string) => api.verifyMPIN(phoneNumber, mpin),
     onSuccess: (response: any) => {
-      const { admin, tokens, message } = response.data.data;
+      console.log('✅ MPIN verification response:', response.data);
       
-      // Login success
-      login(phoneNumber, tokens, admin);
-      
-      showToast('success', message || 'Login successful');
+      if (response.data.success) {
+        const { admin, tokens, message } = response.data.data;
+        
+        console.log('🔐 Tokens received:', {
+          accessTokenLength: tokens?.access_token?.length || 0,
+          refreshTokenLength: tokens?.refresh_token?.length || 0,
+          adminId: admin?.admin_id
+        });
+        
+        if (!tokens?.access_token || !tokens?.refresh_token) {
+          console.error('❌ Tokens missing in response:', response.data);
+          setError('Invalid response from server. Please try again.');
+          showToast('error', 'Invalid server response');
+          return;
+        }
+        
+        // Login success - tokens will be stored by AuthContext
+        login(phoneNumber, tokens, admin);
+        
+        showToast('success', message || 'Login successful');
+        
+        // Navigate to MainDashboard
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainDashboard' }],
+        });
+      } else {
+        const errorMessage = response.data.message || 'MPIN verification failed';
+        setError(errorMessage);
+        showToast('error', errorMessage);
+        setMpin('');
+        mpinInputRef.current?.clearAll();
+      }
     },
     onError: (error: any) => {
+      console.error('❌ MPIN verification error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
       const errorType = error.response?.data?.error;
       const errorMessage = error.response?.data?.message || 'MPIN verification failed';
       
       if (errorType === 'MPIN rate limit exceeded') {
         setIsLocked(true);
         setLockTime(60);
+        setError('Too many failed attempts. Please try again after 60 seconds.');
         Alert.alert(
           'MPIN Locked',
           'Too many failed attempts. Please try again after 60 seconds.',
@@ -4636,33 +5324,41 @@ const VerifyMPINScreen = () => {
         return;
       }
       
-      setError(true);
       const newAttemptCount = attemptCount + 1;
       setAttemptCount(newAttemptCount);
       
       if (newAttemptCount >= 3) {
-        Alert.alert(
-          'Warning',
-          `You have ${5 - newAttemptCount} attempts left before temporary lock.`,
-          [{ text: 'OK' }]
-        );
+        setError(`Invalid MPIN. You have ${5 - newAttemptCount} attempts left.`);
+      } else {
+        setError('Invalid MPIN. Please try again.');
       }
       
       showToast('error', errorMessage);
       
       // Clear MPIN after error
       setMpin('');
+      mpinInputRef.current?.clearAll();
+    },
+    onSettled: () => {
+      setIsLoading(false);
     },
   });
 
-  const handleMPINComplete = (enteredMpin: string) => {
+  const handleMPINSubmit = (enteredMpin: string) => {
     if (isLocked) {
+      setError(`Please wait ${lockTime} seconds before trying again`);
       showToast('error', `Please wait ${lockTime} seconds before trying again`);
       return;
     }
     
+    if (enteredMpin.length !== 6) {
+      setError('Please enter 6-digit MPIN');
+      return;
+    }
+    
     setMpin(enteredMpin);
-    setError(false);
+    setError('');
+    setIsLoading(true);
     mutation.mutate(enteredMpin);
   };
 
@@ -4670,20 +5366,52 @@ const VerifyMPINScreen = () => {
     navigation.navigate('ForgotMPIN', { phoneNumber });
   };
 
-  const handleUseDifferentAccount = () => {
-    navigation.navigate('LoginInitiate');
+  const handleRemovePhoneNumber = async () => {
+    Alert.alert(
+      'Remove Phone Number',
+      'Are you sure you want to remove this phone number? You will need to enter it again next time.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            await clearPhoneNumber();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginInitiate' }],
+            });
+          }
+        }
+      ]
+    );
   };
 
-  const isPending = mutation.isPending;
+  const handleUseDifferentAccount = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'LoginInitiate' }],
+    });
+  };
 
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContent}
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            minHeight: keyboardHeight > 0 ? height : undefined,
+            paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 
+          }
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -4697,40 +5425,59 @@ const VerifyMPINScreen = () => {
           </Text>
 
           <MPINInput
-            onComplete={handleMPINComplete}
-            error={error}
-            disabled={isPending || isLocked}
+            ref={mpinInputRef}
+            onComplete={setMpin}
+            onSubmit={handleMPINSubmit}
+            error={!!error}
+            disabled={isLoading || isLocked}
+            showSubmitButton={true}
           />
 
-          {isLocked && (
+          {isLocked ? (
             <View style={styles.lockContainer}>
               <Text style={styles.lockText}>
                 MPIN locked. Try again in {lockTime} seconds
               </Text>
             </View>
-          )}
+          ) : null}
 
-          {isPending && (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Verifying MPIN...</Text>
             </View>
-          )}
+          ) : null}
 
-          <TouchableOpacity
-            style={styles.forgotButton}
-            onPress={handleForgotMPIN}
-            disabled={isPending}
-          >
-            <Text style={styles.forgotText}>Forgot MPIN?</Text>
-          </TouchableOpacity>
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleForgotMPIN}
+              disabled={isLoading}
+            >
+              <Text style={styles.actionText}>Forgot MPIN?</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.differentAccountButton}
-            onPress={handleUseDifferentAccount}
-            disabled={isPending}
-          >
-            <Text style={styles.differentAccountText}>Use different account</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleRemovePhoneNumber}
+              disabled={isLoading}
+            >
+              <Text style={styles.actionText}>Remove Number</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleUseDifferentAccount}
+              disabled={isLoading}
+            >
+              <Text style={styles.actionText}>Use different account</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.securityInfo}>
@@ -4752,8 +5499,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 60,
+    paddingBottom: 40,
   },
   logoContainer: {
     alignItems: 'center',
@@ -4762,7 +5509,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginTop: 12,
   },
   formContainer: {
@@ -4774,17 +5521,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    marginBottom: 24,
   },
   title: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 32,
     textAlign: 'center',
   },
@@ -4797,53 +5545,67 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   lockText: {
-    color: '#DC2626',
+    color: '#EF4444',
     fontSize: 14,
     textAlign: 'center',
     fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    textAlign: 'center',
   },
   loadingContainer: {
     marginTop: 16,
+    marginBottom: 16,
   },
   loadingText: {
-    color: '#64748B',
+    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },
-  forgotButton: {
+  actionsContainer: {
     marginTop: 24,
     alignItems: 'center',
   },
-  forgotText: {
-    color: '#C084FC', // Purple
+  actionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  actionText: {
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
   },
-  differentAccountButton: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  differentAccountText: {
-    color: '#64748B',
-    fontSize: 14,
-  },
   securityInfo: {
     marginTop: 32,
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   securityTip: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#6D28D9',
     marginBottom: 4,
   },
 });
@@ -4863,6 +5625,8 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, NavigationProp, RouteProp, useRoute } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -4870,9 +5634,10 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import OTPInput from '@/components/OTPInput';
+import OTPInput, { OTPInputRef } from '@/components/OTPInput';
 
-// Define navigation types
+const { height } = Dimensions.get('window');
+
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -4880,7 +5645,10 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type VerifyOTPScreenRouteProp = RouteProp<RootStackParamList, 'VerifyOTP'>;
@@ -4890,46 +5658,91 @@ const VerifyOTPScreen = () => {
   const route = useRoute<VerifyOTPScreenRouteProp>();
   const { phoneNumber, adminId } = route.params;
   
-  const { login } = useAuth();
+  const { login, storePhoneNumber } = useAuth();
   const { showToast } = useToast();
 
   const [otp, setOtp] = useState('');
-  const [timer, setTimer] = useState(600); // 10 minutes in seconds
-  const [error, setError] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(600);
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isResendLoading, setIsResendLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const otpTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const resendTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const otpInputRef = useRef<OTPInputRef>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    startTimer();
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+    startOtpTimer();
+    startResendCooldown();
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: 100, animated: true });
+        }, 100);
       }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      if (otpTimerRef.current) {
+        clearInterval(otpTimerRef.current);
+      }
+      if (resendTimerRef.current) {
+        clearInterval(resendTimerRef.current);
+      }
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
     };
   }, []);
 
   useEffect(() => {
-    if (otp.length === 6) {
+    if (otp.length === 6 && !isLoading) {
       handleVerifyOTP();
     }
   }, [otp]);
 
-  const startTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+  const startOtpTimer = () => {
+    if (otpTimerRef.current) {
+      clearInterval(otpTimerRef.current);
     }
 
-    timerRef.current = setInterval(() => {
-      setTimer((prev) => {
+    otpTimerRef.current = setInterval(() => {
+      setOtpTimer((prev) => {
         if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
+          if (otpTimerRef.current) {
+            clearInterval(otpTimerRef.current);
           }
-          Alert.alert(
-            'OTP Expired',
-            'The OTP has expired. Please request a new one.',
-            [{ text: 'OK', onPress: () => navigation.navigate('SendOTP', { phoneNumber, adminId }) }]
-          );
+          setError('OTP has expired. Please request a new one.');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const startResendCooldown = (seconds: number = 60) => {
+    setResendCooldown(seconds);
+    
+    if (resendTimerRef.current) {
+      clearInterval(resendTimerRef.current);
+    }
+
+    resendTimerRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          if (resendTimerRef.current) {
+            clearInterval(resendTimerRef.current);
+          }
           return 0;
         }
         return prev - 1;
@@ -4946,29 +5759,60 @@ const VerifyOTPScreen = () => {
   const verifyOTPMutation = useMutation({
     mutationFn: (otpCode: string) => api.verifyOTP(phoneNumber, otpCode),
     onSuccess: (response: any) => {
-      const { has_mpin, device_trusted, admin_id, message } = response.data.data;
+      const { 
+        has_mpin, 
+        device_trusted, 
+        admin_id, 
+        message 
+      } = response.data.data;
       
+      console.log('✅ OTP verified:', { 
+        has_mpin, 
+        device_trusted, 
+        admin_id,
+        adminId 
+      });
+      
+      // Store phone number and admin ID permanently
+      const adminIdToStore = admin_id || adminId;
+      if (adminIdToStore) {
+        // Store phone number in format +919876543210 (without spaces)
+        storePhoneNumber(phoneNumber, adminIdToStore);
+      }
+
       if (has_mpin) {
-        // Navigate to MPIN verification
         showToast('success', message || 'Device verified successfully');
         navigation.navigate('VerifyMPIN', { 
           phoneNumber,
-          adminId: admin_id || adminId 
+          adminId: adminIdToStore 
         });
       } else {
-        // Navigate to MPIN setup
         showToast('success', 'Device verified. Please setup your MPIN');
         navigation.navigate('SetupMPIN', { 
           phoneNumber,
-          adminId: admin_id || adminId 
+          adminId: adminIdToStore 
         });
       }
     },
     onError: (error: any) => {
+      console.error('❌ OTP verification error:', error.response?.data);
+      
+      const errorType = error.response?.data?.error;
       const errorMessage = error.response?.data?.message || 'OTP verification failed';
-      setError(true);
-      setOtp('');
-      showToast('error', errorMessage);
+      
+      if (errorType === 'phone number not registered') {
+        setError('Phone number not registered. Please contact administrator.');
+        Alert.alert(
+          'Phone Not Registered',
+          'This phone number is not registered. Please contact your administrator.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        setError(errorMessage);
+        setOtp('');
+        otpInputRef.current?.clearAll();
+        showToast('error', errorMessage);
+      }
     },
     onSettled: () => {
       setIsLoading(false);
@@ -4979,31 +5823,58 @@ const VerifyOTPScreen = () => {
     mutationFn: () => api.sendOTP(phoneNumber, 'admin_login'),
     onSuccess: () => {
       showToast('success', 'OTP resent successfully');
-      setTimer(600); // Reset to 10 minutes
-      startTimer();
+      setOtpTimer(600);
+      setError('');
+      setOtp('');
+      otpInputRef.current?.clearAll();
+      startOtpTimer();
+      setIsResendLoading(false);
     },
     onError: (error: any) => {
+      console.error('❌ Resend OTP error:', error.response?.data);
+      
       const errorMessage = error.response?.data?.message || 'Failed to resend OTP';
-      showToast('error', errorMessage);
+      
+      if (error.response?.status === 429) {
+        const retryAfter = error.response.data?.retry_after || 60;
+        startResendCooldown(retryAfter);
+        showToast('error', `Too many requests. Please wait ${retryAfter} seconds`);
+      } else if (error.response?.status === 500 && error.response.data?.error === 'phone number not registered') {
+        Alert.alert(
+          'Phone Not Registered',
+          'This phone number is not registered. Please contact your administrator.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        showToast('error', errorMessage);
+      }
+      setIsResendLoading(false);
     },
   });
 
   const handleVerifyOTP = () => {
     if (otp.length !== 6) {
-      showToast('error', 'Please enter 6-digit OTP');
+      setError('Please enter 6-digit OTP');
+      return;
+    }
+
+    if (otpTimer <= 0) {
+      setError('OTP has expired. Please request a new one.');
       return;
     }
 
     setIsLoading(true);
-    setError(false);
+    setError('');
     verifyOTPMutation.mutate(otp);
   };
 
   const handleResendOTP = () => {
-    if (timer > 540) { // Can't resend before 1 minute
-      showToast('info', 'Please wait before requesting a new OTP');
+    if (resendCooldown > 0) {
+      showToast('info', `Please wait ${resendCooldown} seconds before resending`);
       return;
     }
+    
+    setIsResendLoading(true);
     resendOTPMutation.mutate();
   };
 
@@ -5014,11 +5885,21 @@ const VerifyOTPScreen = () => {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContent}
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            minHeight: keyboardHeight > 0 ? height : undefined,
+            paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 
+          }
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -5037,31 +5918,36 @@ const VerifyOTPScreen = () => {
           </View>
 
           <View style={styles.timerContainer}>
-            <Text style={styles.timerText}>Time remaining: {formatTime(timer)}</Text>
+            <Text style={styles.timerText}>OTP expires in: {formatTime(otpTimer)}</Text>
           </View>
 
           <OTPInput
+            ref={otpInputRef}
             length={6}
             onComplete={setOtp}
-            error={error}
+            error={!!error}
             disabled={isLoading}
             autoFocus={true}
+            showSubmitButton={false}
           />
 
-          {error && (
-            <Text style={styles.errorText}>
-              Invalid OTP. Please try again.
-            </Text>
-          )}
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
-          {isLoading && (
+          {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Verifying OTP...</Text>
             </View>
-          )}
+          ) : null}
 
           <TouchableOpacity
-            style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
+            style={[
+              styles.verifyButton, 
+              (isLoading || otp.length !== 6) && styles.buttonDisabled
+            ]}
             onPress={handleVerifyOTP}
             disabled={isLoading || otp.length !== 6}
           >
@@ -5071,25 +5957,24 @@ const VerifyOTPScreen = () => {
           </TouchableOpacity>
 
           <View style={styles.resendContainer}>
-            <Text style={styles.resendText}>
-              Didn't receive OTP? 
-            </Text>
+            <Text style={styles.resendText}>Didn't receive OTP?</Text>
             <TouchableOpacity
               onPress={handleResendOTP}
-              disabled={resendOTPMutation.isPending || timer > 540}
+              disabled={isResendLoading || resendCooldown > 0}
             >
               <Text style={[
                 styles.resendButton,
-                (resendOTPMutation.isPending || timer > 540) && styles.resendButtonDisabled
+                (isResendLoading || resendCooldown > 0) && styles.resendButtonDisabled
               ]}>
-                {resendOTPMutation.isPending ? 'Sending...' : 'Resend OTP'}
+                {isResendLoading ? 'Sending...' : 
+                 resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity onPress={handleGoBack}>
+          <TouchableOpacity onPress={handleGoBack} disabled={isLoading}>
             <Text style={styles.backButton}>← Change phone number</Text>
           </TouchableOpacity>
           
@@ -5097,8 +5982,9 @@ const VerifyOTPScreen = () => {
             <Text style={styles.securityTitle}>Important:</Text>
             <Text style={styles.securityText}>
               • OTP expires in 10 minutes
-              {'\n'}• Enter OTP within {formatTime(timer)}
+              {'\n'}• Enter OTP within {formatTime(otpTimer)}
               {'\n'}• This verifies your device for secure access
+              {'\n'}• Rate limit applies for OTP resend
             </Text>
           </View>
         </View>
@@ -5115,8 +6001,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 60,
   },
   logoContainer: {
     alignItems: 'center',
@@ -5125,7 +6010,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginTop: 12,
   },
   formContainer: {
@@ -5141,15 +6026,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 24,
     textAlign: 'center',
+    lineHeight: 20,
   },
   phoneContainer: {
     backgroundColor: '#FFFFFF',
@@ -5157,18 +6043,18 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E5E7EB',
     alignItems: 'center',
   },
   phoneLabel: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#6B7280',
     marginBottom: 4,
   },
   phoneNumber: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#1F2937',
   },
   timerContainer: {
     backgroundColor: '#FEF3C7',
@@ -5184,32 +6070,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
   errorText: {
     color: '#DC2626',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 16,
   },
   loadingContainer: {
     marginTop: 16,
     marginBottom: 16,
   },
   loadingText: {
-    color: '#64748B',
+    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },
   verifyButton: {
-    backgroundColor: '#C084FC', // Purple
-    borderRadius: 8,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 20,
   },
   buttonDisabled: {
-    backgroundColor: '#D8B4FE', // Light purple
+    backgroundColor: '#D1D5DB',
   },
   verifyButtonText: {
     color: '#FFFFFF',
@@ -5224,43 +6117,43 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: 14,
-    color: '#64748B',
+    color: '#6B7280',
     marginRight: 4,
   },
   resendButton: {
     fontSize: 14,
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontWeight: '600',
   },
   resendButtonDisabled: {
-    color: '#D8B4FE', // Light purple
+    color: '#D1D5DB',
   },
   footer: {
     marginTop: 32,
   },
   backButton: {
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 24,
   },
   securityInfo: {
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   securityText: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#6D28D9',
     lineHeight: 18,
   },
 });
@@ -6083,7 +6976,7 @@ export default DepartmentScreen;
 FILE: src/screens/dashboard/MainDashboardScreen.tsx
 ========================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6094,7 +6987,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
@@ -6106,10 +6999,6 @@ import StatsOverview from '@/components/StatsOverview';
 
 const { width } = Dimensions.get('window');
 
-/* ============================================================
-   Navigation Types
-   ============================================================ */
-
 type RootStackParamList = {
   MainDashboard: undefined;
   Profile: undefined;
@@ -6120,13 +7009,9 @@ type RootStackParamList = {
 type MainDashboardScreenNavigationProp =
   NavigationProp<RootStackParamList, 'MainDashboard'>;
 
-/* ============================================================
-   Screen
-   ============================================================ */
-
 const MainDashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainDashboardScreenNavigationProp>();
-  const { adminInfo, logout } = useAuth();
+  const { adminInfo, logout, validateSession } = useAuth();
   const { showToast } = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -6135,11 +7020,62 @@ const MainDashboardScreen: React.FC = () => {
     remaining: 0,
     used: 0,
   });
+  const [isSessionValidated, setIsSessionValidated] = useState(false);
 
-  const { data: profileData, refetch, isLoading } = useQuery({
+  // Validate session on component mount
+  useEffect(() => {
+    const validateSessionOnMount = async () => {
+      try {
+        console.log('🔍 Validating session on dashboard mount...');
+        const isValid = await validateSession();
+        
+        if (!isValid) {
+          console.log('❌ Session invalid on dashboard mount');
+          showToast('error', 'Session expired. Please login again.');
+          // Clear session and navigate to VerifyMPIN
+          await logout();
+        } else {
+          console.log('✅ Session validated on dashboard mount');
+          setIsSessionValidated(true);
+        }
+      } catch (error) {
+        console.error('❌ Session validation error on dashboard:', error);
+        showToast('error', 'Session validation failed. Please login again.');
+        await logout();
+      }
+    };
+
+    validateSessionOnMount();
+  }, [validateSession, logout, showToast]);
+
+  // Validate session when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const validateOnFocus = async () => {
+        if (isSessionValidated) {
+          try {
+            console.log('🔍 Validating session on focus...');
+            const isValid = await validateSession();
+            
+            if (!isValid) {
+              console.log('❌ Session invalid on focus');
+              showToast('error', 'Session expired. Please login again.');
+              await logout();
+            }
+          } catch (error) {
+            console.error('❌ Session validation error on focus:', error);
+          }
+        }
+      };
+
+      validateOnFocus();
+    }, [validateSession, logout, showToast, isSessionValidated])
+  );
+
+  const { data: profileData, refetch, isLoading: profileLoading } = useQuery({
     queryKey: ['adminProfile'],
     queryFn: () => api.getAdminProfile(),
-    enabled: !!adminInfo,
+    enabled: !!adminInfo && isSessionValidated,
   });
 
   useEffect(() => {
@@ -6175,6 +7111,15 @@ const MainDashboardScreen: React.FC = () => {
       ],
     );
   };
+
+  // Show loading while validating session
+  if (!isSessionValidated) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Validating session...</Text>
+      </View>
+    );
+  }
 
   const departments: string[] = adminInfo?.departments || [];
 
@@ -6214,7 +7159,7 @@ const MainDashboardScreen: React.FC = () => {
           onPress={() => navigation.navigate('Profile')}
           style={styles.profileButton}
         >
-          <Icon name="account-circle" size={32} color="#C084FC" /> {/* Purple */}
+          <Icon name="account-circle" size={32} color="#C084FC" />
         </TouchableOpacity>
       </View>
 
@@ -6225,8 +7170,8 @@ const MainDashboardScreen: React.FC = () => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#C084FC']} // Purple
-            tintColor="#C084FC" // Purple
+            colors={['#C084FC']}
+            tintColor="#C084FC"
           />
         }
         showsVerticalScrollIndicator={false}
@@ -6235,7 +7180,7 @@ const MainDashboardScreen: React.FC = () => {
           dailyQuota={dailyQuota}
           permissions={adminInfo?.permissions?.length || 0}
           departments={departments.length}
-          isLoading={isLoading}
+          isLoading={profileLoading}
         />
 
         {/* ================= Quick Actions ================= */}
@@ -6309,7 +7254,7 @@ const MainDashboardScreen: React.FC = () => {
         {dailyQuota.limit > 0 && (
           <View style={styles.quotaContainer}>
             <View style={styles.quotaHeader}>
-              <Icon name="chart-bar" size={20} color="#C084FC" /> {/* Purple */}
+              <Icon name="chart-bar" size={20} color="#C084FC" />
               <Text style={styles.quotaTitle}>Daily API Quota</Text>
             </View>
 
@@ -6349,13 +7294,18 @@ const MainDashboardScreen: React.FC = () => {
 
 export default MainDashboardScreen;
 
-/* ============================================================
-   Styles
-   ============================================================ */
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748B',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6366,28 +7316,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-
   headerTitleContainer: { flex: 1 },
-
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#1E293B',
   },
-
   headerSubtitle: {
     fontSize: 13,
     color: '#64748B',
     marginTop: 2,
   },
-
   profileButton: { padding: 8 },
-
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
-
   actionsContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -6396,68 +7340,56 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-
   actionButton: {
     width: '48%',
     alignItems: 'center',
     marginBottom: 16,
   },
-
   iconContainer: {
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#FAF5FF', // Light purple background
+    backgroundColor: '#FAF5FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#E9D5FF',
   },
-
   actionLabel: {
     fontSize: 13,
     color: '#475569',
     textAlign: 'center',
   },
-
   section: { marginTop: 24 },
-
   sectionHeader: { marginBottom: 16 },
-
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
     color: '#1E293B',
   },
-
   sectionSubtitle: {
     fontSize: 14,
     color: '#64748B',
     marginTop: 4,
   },
-
   categorySection: { marginBottom: 24 },
-
   categoryTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#475569',
     marginBottom: 12,
   },
-
   departmentsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -6,
   },
-
   quotaContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -6466,20 +7398,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-
   quotaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-
   quotaTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1E293B',
     marginLeft: 8,
   },
-
   quotaBar: {
     height: 8,
     backgroundColor: '#E2E8F0',
@@ -6487,28 +7416,23 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 8,
   },
-
   quotaFill: {
     height: '100%',
-    backgroundColor: '#C084FC', // Purple
+    backgroundColor: '#C084FC',
     borderRadius: 4,
   },
-
   quotaInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-
   quotaText: {
     fontSize: 13,
     color: '#64748B',
   },
-
   footer: {
     marginTop: 32,
     alignItems: 'center',
   },
-
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6518,14 +7442,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     marginBottom: 16,
   },
-
   logoutText: {
     color: '#DC2626',
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 8,
   },
-
   versionText: {
     fontSize: 12,
     color: '#94A3B8',
@@ -7245,6 +8167,18 @@ class ApiService {
     });
   }
 
+  // Add this method to the ApiService class in src/services/api.ts
+
+async validateSession() {
+  const deviceInfo = await getStoredDeviceInfo();
+  return this.getApi().get('/auth/validate', {
+    headers: {
+      'X-Device-ID': deviceInfo.deviceId,
+      'X-Company-ID': '', 
+    },
+  });
+}
+
   async verifyForgotMPIN(phoneNumber: string, otpCode: string, newMpin: string) {
     const deviceInfo = await getStoredDeviceInfo();
     return this.getApi().post('/admin-auth/mpin/forgot/verify', {
@@ -7431,6 +8365,10 @@ import * as SecureStore from 'expo-secure-store';
 // Regular storage for non-sensitive data
 export const setItem = async (key: string, value: string): Promise<void> => {
   try {
+    if (value === undefined || value === null) {
+      console.warn(`Attempting to store null/undefined value for key: ${key}`);
+      return;
+    }
     await AsyncStorage.setItem(key, value);
   } catch (error) {
     console.error('Error storing data:', error);
@@ -7454,15 +8392,15 @@ export const removeItem = async (key: string): Promise<void> => {
   }
 };
 
-// Clear only session data, keep phone number and device info
+// Clear only session data (tokens and admin info), keep phone number
 export const clearSessionData = async (): Promise<void> => {
   try {
     const keys = [
-      'access_token',
-      'refresh_token',
-      'admin_info',
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.ADMIN_INFO,
     ];
-
+    
     await AsyncStorage.multiRemove(keys);
     console.log("✅ SESSION DATA CLEARED, PHONE NUMBER & ADMIN ID PRESERVED");
   } catch (error) {
@@ -7474,12 +8412,11 @@ export const clearSessionData = async (): Promise<void> => {
 export const clearAllUserData = async (): Promise<void> => {
   try {
     const keys = [
-      'access_token',
-      'refresh_token',
-      'admin_id',
-      'admin_info',
-      'phone_number',
-      'country_code',
+      STORAGE_KEYS.ACCESS_TOKEN,
+      STORAGE_KEYS.REFRESH_TOKEN,
+      STORAGE_KEYS.ADMIN_ID,
+      STORAGE_KEYS.ADMIN_INFO,
+      STORAGE_KEYS.PHONE_NUMBER,
     ];
 
     await AsyncStorage.multiRemove(keys);
@@ -7508,57 +8445,35 @@ export const clearAllStorage = async (): Promise<void> => {
 // Helper to check if user has stored phone number
 export const hasStoredPhoneNumber = async (): Promise<boolean> => {
   try {
-    const phoneNumber = await getItem('phone_number');
-    const adminId = await getItem('admin_id');
+    const phoneNumber = await getItem(STORAGE_KEYS.PHONE_NUMBER);
+    const adminId = await getItem(STORAGE_KEYS.ADMIN_ID);
     return !!(phoneNumber && adminId);
   } catch (error) {
     return false;
   }
 };
 
-// Get formatted phone number with country code
+// Get formatted phone number (stored as +919876543210 format)
 export const getFormattedPhoneNumber = async (): Promise<string | null> => {
   try {
-    const phoneNumber = await getItem('phone_number');
-    const countryCode = await getItem('country_code') || '+91';
-    
-    if (phoneNumber) {
-      return `${countryCode}${phoneNumber}`;
-    }
-    return null;
+    const phoneNumber = await getItem(STORAGE_KEYS.PHONE_NUMBER);
+    // Return phone number as stored (format: +919876543210)
+    return phoneNumber;
   } catch (error) {
     return null;
   }
 };
 
-// Add these constants at the top
+// Storage keys based on your API responses
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',
   REFRESH_TOKEN: 'refresh_token',
   ADMIN_ID: 'admin_id',
   ADMIN_INFO: 'admin_info',
-  PHONE_NUMBER: 'phone_number',
-  COUNTRY_CODE: 'country_code',
+  PHONE_NUMBER: 'phone_number', // Store as +919876543210 format
   DEVICE_ID: 'device_id',
   USER_AGENT: 'user_agent',
-  IS_FIRST_LAUNCH: 'is_first_launch',
-  ROLE_MASK: 'role_mask',
-  PERMISSION_MASK: 'permission_mask',
-};
-
-// Add this helper function
-export const getAdminRole = async (): Promise<number> => {
-  try {
-    const adminInfoStr = await getItem('admin_info');
-    if (adminInfoStr) {
-      const adminInfo = JSON.parse(adminInfoStr);
-      return adminInfo.role_mask || 0;
-    }
-    return 0;
-  } catch (error) {
-    console.error('Error getting admin role:', error);
-    return 0;
-  }
+  DEVICE_FINGERPRINT: 'device_fingerprint',
 };
 ========================================
 FILE: src/types/index.ts

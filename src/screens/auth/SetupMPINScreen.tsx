@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, NavigationProp, RouteProp, useRoute } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -15,9 +16,8 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import MPINInput from '@/components/MPINInput';
+import MPINInput, { MPINInputRef } from '@/components/MPINInput';
 
-// Define navigation types
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -25,7 +25,10 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type SetupMPINScreenRouteProp = RouteProp<RootStackParamList, 'SetupMPIN'>;
@@ -35,14 +38,36 @@ const SetupMPINScreen = () => {
   const route = useRoute<SetupMPINScreenRouteProp>();
   const { phoneNumber, adminId } = route.params;
   
-  const { login } = useAuth();
+  const { login, storePhoneNumber } = useAuth();
   const { showToast } = useToast();
 
   const [mpin, setMpin] = useState('');
   const [confirmMpin, setConfirmMpin] = useState('');
-  const [step, setStep] = useState(1); // 1: Enter MPIN, 2: Confirm MPIN
+  const [step, setStep] = useState(1);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const mpinInputRef = useRef<MPINInputRef>(null);
+
+  React.useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   const setupMPINMutation = useMutation({
     mutationFn: (mpin: string) => api.setupMPIN(adminId, mpin),
@@ -51,11 +76,15 @@ const SetupMPINScreen = () => {
       api.verifyMPIN(phoneNumber, mpin)
         .then(verifyResponse => {
           const { admin, tokens, message } = verifyResponse.data.data;
+          // Store phone number permanently
+          storePhoneNumber(phoneNumber, admin.admin_id);
           login(phoneNumber, tokens, admin);
           showToast('success', message || 'MPIN setup successful');
         })
         .catch(error => {
-          showToast('error', 'MPIN setup successful. Please login with your MPIN.');
+          // If verification fails, still store phone number and redirect to verify MPIN
+          showToast('success', 'MPIN setup successful. Please login with your MPIN.');
+          storePhoneNumber(phoneNumber, adminId);
           navigation.navigate('VerifyMPIN', { phoneNumber });
         });
     },
@@ -74,11 +103,13 @@ const SetupMPINScreen = () => {
         setStep(1);
         setMpin('');
         setConfirmMpin('');
+        mpinInputRef.current?.clearAll();
       } else {
         showToast('error', errorMessage);
         setStep(1);
         setMpin('');
         setConfirmMpin('');
+        mpinInputRef.current?.clearAll();
       }
     },
     onSettled: () => {
@@ -86,22 +117,18 @@ const SetupMPINScreen = () => {
     },
   });
 
-  const handleMPINComplete = (enteredMpin: string) => {
+  const handleMPINSubmit = (enteredMpin: string) => {
     if (step === 1) {
       // Validate MPIN strength
-      if (enteredMpin === '111111' || enteredMpin === '123456' || enteredMpin === '000000') {
+      if (isWeakMpin(enteredMpin)) {
         setError('MPIN is too common. Please choose a stronger MPIN.');
-        return;
-      }
-
-      if (enteredMpin.split('').every((digit, i, arr) => digit === arr[0])) {
-        setError('MPIN cannot have all same digits');
         return;
       }
 
       setMpin(enteredMpin);
       setError('');
       setStep(2);
+      mpinInputRef.current?.clearAll();
     } else {
       setConfirmMpin(enteredMpin);
       
@@ -111,13 +138,7 @@ const SetupMPINScreen = () => {
       } else {
         setError('MPIN does not match. Please try again.');
         setConfirmMpin('');
-        // Optional: Auto go back to step 1
-        setTimeout(() => {
-          setStep(1);
-          setMpin('');
-          setConfirmMpin('');
-          setError('');
-        }, 1000);
+        mpinInputRef.current?.clearAll();
       }
     }
   };
@@ -127,6 +148,7 @@ const SetupMPINScreen = () => {
       setStep(1);
       setConfirmMpin('');
       setError('');
+      mpinInputRef.current?.clearAll();
     } else {
       navigation.goBack();
     }
@@ -145,11 +167,16 @@ const SetupMPINScreen = () => {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 }
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -179,10 +206,13 @@ const SetupMPINScreen = () => {
 
           <View style={styles.mpinContainer}>
             <MPINInput
-              onComplete={handleMPINComplete}
+              ref={mpinInputRef}
+              onSubmit={handleMPINSubmit}
               error={!!error}
               disabled={isLoading}
               autoFocus={true}
+              showSubmitButton={true}
+              secureTextEntry={true}
             />
           </View>
 
@@ -212,13 +242,13 @@ const SetupMPINScreen = () => {
             </View>
           )}
 
-          {isLoading && (
+          {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>
                 {step === 2 ? 'Setting up MPIN...' : 'Processing...'}
               </Text>
             </View>
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={styles.backButton}
@@ -253,8 +283,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 60,
   },
   logoContainer: {
     alignItems: 'center',
@@ -263,7 +292,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginTop: 12,
   },
   formContainer: {
@@ -279,13 +308,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 24,
     textAlign: 'center',
   },
@@ -299,17 +328,17 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeStep: {
-    backgroundColor: '#C084FC', // Purple
+    backgroundColor: '#8B5CF6',
   },
   stepText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#6B7280',
   },
   activeStepText: {
     color: '#FFFFFF',
@@ -317,7 +346,7 @@ const styles = StyleSheet.create({
   stepLine: {
     width: 40,
     height: 2,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#E5E7EB',
     marginHorizontal: 8,
   },
   mpinContainer: {
@@ -332,27 +361,27 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   errorText: {
-    color: '#DC2626',
+    color: '#EF4444',
     fontSize: 14,
     textAlign: 'center',
   },
   guidelinesContainer: {
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   guidelinesTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   guideline: {
     fontSize: 13,
-    color: '#6B21A8',
+    color: '#6D28D9',
     marginBottom: 4,
     lineHeight: 18,
   },
@@ -360,7 +389,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   loadingText: {
-    color: '#64748B',
+    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },
@@ -369,27 +398,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backButtonText: {
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
   },
   securityInfo: {
     marginTop: 32,
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   securityText: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#6D28D9',
     lineHeight: 18,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, NavigationProp, useRoute, RouteProp } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -15,10 +17,11 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import MPINInput from '@/components/MPINInput';
+import MPINInput, { MPINInputRef } from '@/components/MPINInput';
 import { getFormattedPhoneNumber } from '@/services/storage';
 
-// Define navigation types
+const { height } = Dimensions.get('window');
+
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -26,7 +29,10 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type VerifyMPINScreenRouteProp = RouteProp<RootStackParamList, 'VerifyMPIN'>;
@@ -36,15 +42,19 @@ const VerifyMPINScreen = () => {
   const route = useRoute<VerifyMPINScreenRouteProp>();
   const params = route.params;
   
-  const { login } = useAuth();
+  const { login, clearPhoneNumber } = useAuth();
   const { showToast } = useToast();
   
   const [mpin, setMpin] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [attemptCount, setAttemptCount] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockTime, setLockTime] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const mpinInputRef = useRef<MPINInputRef>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     const loadPhoneNumber = async () => {
@@ -58,6 +68,27 @@ const VerifyMPINScreen = () => {
       }
     };
     loadPhoneNumber();
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: 100, animated: true });
+        }, 100);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
   }, [params?.phoneNumber]);
 
   useEffect(() => {
@@ -79,20 +110,56 @@ const VerifyMPINScreen = () => {
   const mutation = useMutation({
     mutationFn: (mpin: string) => api.verifyMPIN(phoneNumber, mpin),
     onSuccess: (response: any) => {
-      const { admin, tokens, message } = response.data.data;
+      console.log('✅ MPIN verification response:', response.data);
       
-      // Login success
-      login(phoneNumber, tokens, admin);
-      
-      showToast('success', message || 'Login successful');
+      if (response.data.success) {
+        const { admin, tokens, message } = response.data.data;
+        
+        console.log('🔐 Tokens received:', {
+          accessTokenLength: tokens?.access_token?.length || 0,
+          refreshTokenLength: tokens?.refresh_token?.length || 0,
+          adminId: admin?.admin_id
+        });
+        
+        if (!tokens?.access_token || !tokens?.refresh_token) {
+          console.error('❌ Tokens missing in response:', response.data);
+          setError('Invalid response from server. Please try again.');
+          showToast('error', 'Invalid server response');
+          return;
+        }
+        
+        // Login success - tokens will be stored by AuthContext
+        login(phoneNumber, tokens, admin);
+        
+        showToast('success', message || 'Login successful');
+        
+        // Navigate to MainDashboard
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainDashboard' }],
+        });
+      } else {
+        const errorMessage = response.data.message || 'MPIN verification failed';
+        setError(errorMessage);
+        showToast('error', errorMessage);
+        setMpin('');
+        mpinInputRef.current?.clearAll();
+      }
     },
     onError: (error: any) => {
+      console.error('❌ MPIN verification error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
       const errorType = error.response?.data?.error;
       const errorMessage = error.response?.data?.message || 'MPIN verification failed';
       
       if (errorType === 'MPIN rate limit exceeded') {
         setIsLocked(true);
         setLockTime(60);
+        setError('Too many failed attempts. Please try again after 60 seconds.');
         Alert.alert(
           'MPIN Locked',
           'Too many failed attempts. Please try again after 60 seconds.',
@@ -101,33 +168,41 @@ const VerifyMPINScreen = () => {
         return;
       }
       
-      setError(true);
       const newAttemptCount = attemptCount + 1;
       setAttemptCount(newAttemptCount);
       
       if (newAttemptCount >= 3) {
-        Alert.alert(
-          'Warning',
-          `You have ${5 - newAttemptCount} attempts left before temporary lock.`,
-          [{ text: 'OK' }]
-        );
+        setError(`Invalid MPIN. You have ${5 - newAttemptCount} attempts left.`);
+      } else {
+        setError('Invalid MPIN. Please try again.');
       }
       
       showToast('error', errorMessage);
       
       // Clear MPIN after error
       setMpin('');
+      mpinInputRef.current?.clearAll();
+    },
+    onSettled: () => {
+      setIsLoading(false);
     },
   });
 
-  const handleMPINComplete = (enteredMpin: string) => {
+  const handleMPINSubmit = (enteredMpin: string) => {
     if (isLocked) {
+      setError(`Please wait ${lockTime} seconds before trying again`);
       showToast('error', `Please wait ${lockTime} seconds before trying again`);
       return;
     }
     
+    if (enteredMpin.length !== 6) {
+      setError('Please enter 6-digit MPIN');
+      return;
+    }
+    
     setMpin(enteredMpin);
-    setError(false);
+    setError('');
+    setIsLoading(true);
     mutation.mutate(enteredMpin);
   };
 
@@ -135,20 +210,52 @@ const VerifyMPINScreen = () => {
     navigation.navigate('ForgotMPIN', { phoneNumber });
   };
 
-  const handleUseDifferentAccount = () => {
-    navigation.navigate('LoginInitiate');
+  const handleRemovePhoneNumber = async () => {
+    Alert.alert(
+      'Remove Phone Number',
+      'Are you sure you want to remove this phone number? You will need to enter it again next time.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            await clearPhoneNumber();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginInitiate' }],
+            });
+          }
+        }
+      ]
+    );
   };
 
-  const isPending = mutation.isPending;
+  const handleUseDifferentAccount = () => {
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'LoginInitiate' }],
+    });
+  };
 
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContent}
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            minHeight: keyboardHeight > 0 ? height : undefined,
+            paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 
+          }
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -162,40 +269,59 @@ const VerifyMPINScreen = () => {
           </Text>
 
           <MPINInput
-            onComplete={handleMPINComplete}
-            error={error}
-            disabled={isPending || isLocked}
+            ref={mpinInputRef}
+            onComplete={setMpin}
+            onSubmit={handleMPINSubmit}
+            error={!!error}
+            disabled={isLoading || isLocked}
+            showSubmitButton={true}
           />
 
-          {isLocked && (
+          {isLocked ? (
             <View style={styles.lockContainer}>
               <Text style={styles.lockText}>
                 MPIN locked. Try again in {lockTime} seconds
               </Text>
             </View>
-          )}
+          ) : null}
 
-          {isPending && (
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Verifying MPIN...</Text>
             </View>
-          )}
+          ) : null}
 
-          <TouchableOpacity
-            style={styles.forgotButton}
-            onPress={handleForgotMPIN}
-            disabled={isPending}
-          >
-            <Text style={styles.forgotText}>Forgot MPIN?</Text>
-          </TouchableOpacity>
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleForgotMPIN}
+              disabled={isLoading}
+            >
+              <Text style={styles.actionText}>Forgot MPIN?</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.differentAccountButton}
-            onPress={handleUseDifferentAccount}
-            disabled={isPending}
-          >
-            <Text style={styles.differentAccountText}>Use different account</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleRemovePhoneNumber}
+              disabled={isLoading}
+            >
+              <Text style={styles.actionText}>Remove Number</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleUseDifferentAccount}
+              disabled={isLoading}
+            >
+              <Text style={styles.actionText}>Use different account</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.securityInfo}>
@@ -217,8 +343,8 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 60,
+    paddingBottom: 40,
   },
   logoContainer: {
     alignItems: 'center',
@@ -227,7 +353,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginTop: 12,
   },
   formContainer: {
@@ -239,17 +365,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    marginBottom: 24,
   },
   title: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 32,
     textAlign: 'center',
   },
@@ -262,53 +389,67 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   lockText: {
-    color: '#DC2626',
+    color: '#EF4444',
     fontSize: 14,
     textAlign: 'center',
     fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    textAlign: 'center',
   },
   loadingContainer: {
     marginTop: 16,
+    marginBottom: 16,
   },
   loadingText: {
-    color: '#64748B',
+    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },
-  forgotButton: {
+  actionsContainer: {
     marginTop: 24,
     alignItems: 'center',
   },
-  forgotText: {
-    color: '#C084FC', // Purple
+  actionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  actionText: {
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
   },
-  differentAccountButton: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  differentAccountText: {
-    color: '#64748B',
-    fontSize: 14,
-  },
   securityInfo: {
     marginTop: 32,
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   securityTip: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#6D28D9',
     marginBottom: 4,
   },
 });

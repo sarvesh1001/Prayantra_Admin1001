@@ -8,6 +8,8 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, NavigationProp, RouteProp, useRoute } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
@@ -15,9 +17,10 @@ import { api } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import OTPInput from '@/components/OTPInput';
+import OTPInput, { OTPInputRef } from '@/components/OTPInput';
 
-// Define navigation types
+const { height } = Dimensions.get('window');
+
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -25,7 +28,10 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
+  Profile: undefined;
+  ChangeMPIN: undefined;
+  Department: { department: string };
 };
 
 type VerifyOTPScreenRouteProp = RouteProp<RootStackParamList, 'VerifyOTP'>;
@@ -35,46 +41,91 @@ const VerifyOTPScreen = () => {
   const route = useRoute<VerifyOTPScreenRouteProp>();
   const { phoneNumber, adminId } = route.params;
   
-  const { login } = useAuth();
+  const { login, storePhoneNumber } = useAuth();
   const { showToast } = useToast();
 
   const [otp, setOtp] = useState('');
-  const [timer, setTimer] = useState(600); // 10 minutes in seconds
-  const [error, setError] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(600);
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isResendLoading, setIsResendLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const otpTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const resendTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const otpInputRef = useRef<OTPInputRef>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    startTimer();
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+    startOtpTimer();
+    startResendCooldown();
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: 100, animated: true });
+        }, 100);
       }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      if (otpTimerRef.current) {
+        clearInterval(otpTimerRef.current);
+      }
+      if (resendTimerRef.current) {
+        clearInterval(resendTimerRef.current);
+      }
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
     };
   }, []);
 
   useEffect(() => {
-    if (otp.length === 6) {
+    if (otp.length === 6 && !isLoading) {
       handleVerifyOTP();
     }
   }, [otp]);
 
-  const startTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+  const startOtpTimer = () => {
+    if (otpTimerRef.current) {
+      clearInterval(otpTimerRef.current);
     }
 
-    timerRef.current = setInterval(() => {
-      setTimer((prev) => {
+    otpTimerRef.current = setInterval(() => {
+      setOtpTimer((prev) => {
         if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
+          if (otpTimerRef.current) {
+            clearInterval(otpTimerRef.current);
           }
-          Alert.alert(
-            'OTP Expired',
-            'The OTP has expired. Please request a new one.',
-            [{ text: 'OK', onPress: () => navigation.navigate('SendOTP', { phoneNumber, adminId }) }]
-          );
+          setError('OTP has expired. Please request a new one.');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const startResendCooldown = (seconds: number = 60) => {
+    setResendCooldown(seconds);
+    
+    if (resendTimerRef.current) {
+      clearInterval(resendTimerRef.current);
+    }
+
+    resendTimerRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          if (resendTimerRef.current) {
+            clearInterval(resendTimerRef.current);
+          }
           return 0;
         }
         return prev - 1;
@@ -91,29 +142,60 @@ const VerifyOTPScreen = () => {
   const verifyOTPMutation = useMutation({
     mutationFn: (otpCode: string) => api.verifyOTP(phoneNumber, otpCode),
     onSuccess: (response: any) => {
-      const { has_mpin, device_trusted, admin_id, message } = response.data.data;
+      const { 
+        has_mpin, 
+        device_trusted, 
+        admin_id, 
+        message 
+      } = response.data.data;
       
+      console.log('✅ OTP verified:', { 
+        has_mpin, 
+        device_trusted, 
+        admin_id,
+        adminId 
+      });
+      
+      // Store phone number and admin ID permanently
+      const adminIdToStore = admin_id || adminId;
+      if (adminIdToStore) {
+        // Store phone number in format +919876543210 (without spaces)
+        storePhoneNumber(phoneNumber, adminIdToStore);
+      }
+
       if (has_mpin) {
-        // Navigate to MPIN verification
         showToast('success', message || 'Device verified successfully');
         navigation.navigate('VerifyMPIN', { 
           phoneNumber,
-          adminId: admin_id || adminId 
+          adminId: adminIdToStore 
         });
       } else {
-        // Navigate to MPIN setup
         showToast('success', 'Device verified. Please setup your MPIN');
         navigation.navigate('SetupMPIN', { 
           phoneNumber,
-          adminId: admin_id || adminId 
+          adminId: adminIdToStore 
         });
       }
     },
     onError: (error: any) => {
+      console.error('❌ OTP verification error:', error.response?.data);
+      
+      const errorType = error.response?.data?.error;
       const errorMessage = error.response?.data?.message || 'OTP verification failed';
-      setError(true);
-      setOtp('');
-      showToast('error', errorMessage);
+      
+      if (errorType === 'phone number not registered') {
+        setError('Phone number not registered. Please contact administrator.');
+        Alert.alert(
+          'Phone Not Registered',
+          'This phone number is not registered. Please contact your administrator.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        setError(errorMessage);
+        setOtp('');
+        otpInputRef.current?.clearAll();
+        showToast('error', errorMessage);
+      }
     },
     onSettled: () => {
       setIsLoading(false);
@@ -124,31 +206,58 @@ const VerifyOTPScreen = () => {
     mutationFn: () => api.sendOTP(phoneNumber, 'admin_login'),
     onSuccess: () => {
       showToast('success', 'OTP resent successfully');
-      setTimer(600); // Reset to 10 minutes
-      startTimer();
+      setOtpTimer(600);
+      setError('');
+      setOtp('');
+      otpInputRef.current?.clearAll();
+      startOtpTimer();
+      setIsResendLoading(false);
     },
     onError: (error: any) => {
+      console.error('❌ Resend OTP error:', error.response?.data);
+      
       const errorMessage = error.response?.data?.message || 'Failed to resend OTP';
-      showToast('error', errorMessage);
+      
+      if (error.response?.status === 429) {
+        const retryAfter = error.response.data?.retry_after || 60;
+        startResendCooldown(retryAfter);
+        showToast('error', `Too many requests. Please wait ${retryAfter} seconds`);
+      } else if (error.response?.status === 500 && error.response.data?.error === 'phone number not registered') {
+        Alert.alert(
+          'Phone Not Registered',
+          'This phone number is not registered. Please contact your administrator.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        showToast('error', errorMessage);
+      }
+      setIsResendLoading(false);
     },
   });
 
   const handleVerifyOTP = () => {
     if (otp.length !== 6) {
-      showToast('error', 'Please enter 6-digit OTP');
+      setError('Please enter 6-digit OTP');
+      return;
+    }
+
+    if (otpTimer <= 0) {
+      setError('OTP has expired. Please request a new one.');
       return;
     }
 
     setIsLoading(true);
-    setError(false);
+    setError('');
     verifyOTPMutation.mutate(otp);
   };
 
   const handleResendOTP = () => {
-    if (timer > 540) { // Can't resend before 1 minute
-      showToast('info', 'Please wait before requesting a new OTP');
+    if (resendCooldown > 0) {
+      showToast('info', `Please wait ${resendCooldown} seconds before resending`);
       return;
     }
+    
+    setIsResendLoading(true);
     resendOTPMutation.mutate();
   };
 
@@ -159,11 +268,21 @@ const VerifyOTPScreen = () => {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
     >
       <ScrollView 
-        contentContainerStyle={styles.scrollContent}
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            minHeight: keyboardHeight > 0 ? height : undefined,
+            paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 40 
+          }
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -182,31 +301,36 @@ const VerifyOTPScreen = () => {
           </View>
 
           <View style={styles.timerContainer}>
-            <Text style={styles.timerText}>Time remaining: {formatTime(timer)}</Text>
+            <Text style={styles.timerText}>OTP expires in: {formatTime(otpTimer)}</Text>
           </View>
 
           <OTPInput
+            ref={otpInputRef}
             length={6}
             onComplete={setOtp}
-            error={error}
+            error={!!error}
             disabled={isLoading}
             autoFocus={true}
+            showSubmitButton={false}
           />
 
-          {error && (
-            <Text style={styles.errorText}>
-              Invalid OTP. Please try again.
-            </Text>
-          )}
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
-          {isLoading && (
+          {isLoading ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Verifying OTP...</Text>
             </View>
-          )}
+          ) : null}
 
           <TouchableOpacity
-            style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
+            style={[
+              styles.verifyButton, 
+              (isLoading || otp.length !== 6) && styles.buttonDisabled
+            ]}
             onPress={handleVerifyOTP}
             disabled={isLoading || otp.length !== 6}
           >
@@ -216,25 +340,24 @@ const VerifyOTPScreen = () => {
           </TouchableOpacity>
 
           <View style={styles.resendContainer}>
-            <Text style={styles.resendText}>
-              Didn't receive OTP? 
-            </Text>
+            <Text style={styles.resendText}>Didn't receive OTP?</Text>
             <TouchableOpacity
               onPress={handleResendOTP}
-              disabled={resendOTPMutation.isPending || timer > 540}
+              disabled={isResendLoading || resendCooldown > 0}
             >
               <Text style={[
                 styles.resendButton,
-                (resendOTPMutation.isPending || timer > 540) && styles.resendButtonDisabled
+                (isResendLoading || resendCooldown > 0) && styles.resendButtonDisabled
               ]}>
-                {resendOTPMutation.isPending ? 'Sending...' : 'Resend OTP'}
+                {isResendLoading ? 'Sending...' : 
+                 resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity onPress={handleGoBack}>
+          <TouchableOpacity onPress={handleGoBack} disabled={isLoading}>
             <Text style={styles.backButton}>← Change phone number</Text>
           </TouchableOpacity>
           
@@ -242,8 +365,9 @@ const VerifyOTPScreen = () => {
             <Text style={styles.securityTitle}>Important:</Text>
             <Text style={styles.securityText}>
               • OTP expires in 10 minutes
-              {'\n'}• Enter OTP within {formatTime(timer)}
+              {'\n'}• Enter OTP within {formatTime(otpTimer)}
               {'\n'}• This verifies your device for secure access
+              {'\n'}• Rate limit applies for OTP resend
             </Text>
           </View>
         </View>
@@ -260,8 +384,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 20,
+    paddingTop: 60,
   },
   logoContainer: {
     alignItems: 'center',
@@ -270,7 +393,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginTop: 12,
   },
   formContainer: {
@@ -286,15 +409,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#333',
+    color: '#1F2937',
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#6B7280',
     marginBottom: 24,
     textAlign: 'center',
+    lineHeight: 20,
   },
   phoneContainer: {
     backgroundColor: '#FFFFFF',
@@ -302,18 +426,18 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E5E7EB',
     alignItems: 'center',
   },
   phoneLabel: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#6B7280',
     marginBottom: 4,
   },
   phoneNumber: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1E293B',
+    color: '#1F2937',
   },
   timerContainer: {
     backgroundColor: '#FEF3C7',
@@ -329,32 +453,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
   errorText: {
     color: '#DC2626',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 16,
   },
   loadingContainer: {
     marginTop: 16,
     marginBottom: 16,
   },
   loadingText: {
-    color: '#64748B',
+    color: '#6B7280',
     fontSize: 14,
     textAlign: 'center',
   },
   verifyButton: {
-    backgroundColor: '#C084FC', // Purple
-    borderRadius: 8,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 20,
   },
   buttonDisabled: {
-    backgroundColor: '#D8B4FE', // Light purple
+    backgroundColor: '#D1D5DB',
   },
   verifyButtonText: {
     color: '#FFFFFF',
@@ -369,43 +500,43 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: 14,
-    color: '#64748B',
+    color: '#6B7280',
     marginRight: 4,
   },
   resendButton: {
     fontSize: 14,
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontWeight: '600',
   },
   resendButtonDisabled: {
-    color: '#D8B4FE', // Light purple
+    color: '#D1D5DB',
   },
   footer: {
     marginTop: 32,
   },
   backButton: {
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 24,
   },
   securityInfo: {
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#F5F3FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#DDD6FE',
   },
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#8B5CF6',
     marginBottom: 8,
   },
   securityText: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#6D28D9',
     lineHeight: 18,
   },
 });

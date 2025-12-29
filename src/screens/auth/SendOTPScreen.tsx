@@ -8,15 +8,14 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useNavigation, NavigationProp, RouteProp, useRoute } from '@react-navigation/native';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
-import { STORAGE_KEYS } from '@/services/storage';
 
-// Define navigation types
 type RootStackParamList = {
   LoginInitiate: undefined;
   SendOTP: { phoneNumber: string; adminId?: string };
@@ -24,7 +23,7 @@ type RootStackParamList = {
   SetupMPIN: { phoneNumber: string; adminId: string };
   VerifyMPIN: { phoneNumber?: string; adminId?: string };
   ForgotMPIN: { phoneNumber?: string };
-  MainDrawer: undefined;
+  MainDashboard: undefined;
 };
 
 type SendOTPScreenRouteProp = RouteProp<RootStackParamList, 'SendOTP'>;
@@ -35,13 +34,19 @@ const SendOTPScreen = () => {
   const { phoneNumber, adminId } = route.params;
   const { showToast } = useToast();
 
-  const [timer, setTimer] = useState(60);
-  const [canResend, setCanResend] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0); // Start at 0, will set after first send
+  const [isLoading, setIsLoading] = useState(true); // Start loading to auto-send OTP
+  const [hasSentInitialOTP, setHasSentInitialOTP] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    startTimer();
+    console.log('📱 SendOTPScreen mounted, auto-sending OTP to:', phoneNumber);
+    
+    // Auto-send OTP when screen loads
+    if (!hasSentInitialOTP) {
+      handleSendOTP();
+    }
+    
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -49,18 +54,16 @@ const SendOTPScreen = () => {
     };
   }, []);
 
-  const startTimer = () => {
-    setCanResend(false);
-    setTimer(60);
+  const startTimer = (seconds: number = 60) => {
+    setResendCooldown(seconds);
     
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
 
     timerRef.current = setInterval(() => {
-      setTimer((prev) => {
+      setResendCooldown((prev) => {
         if (prev <= 1) {
-          setCanResend(true);
           if (timerRef.current) {
             clearInterval(timerRef.current);
           }
@@ -74,16 +77,19 @@ const SendOTPScreen = () => {
   const sendOTPMutation = useMutation({
     mutationFn: () => api.sendOTP(phoneNumber, 'admin_login'),
     onSuccess: (response) => {
+      console.log('✅ OTP sent successfully:', response.data);
       showToast('success', 'OTP sent successfully to your phone');
-      startTimer(); // Reset timer after successful send
+      startTimer(60);
+      setHasSentInitialOTP(true);
+      setIsLoading(false);
     },
     onError: (error: any) => {
+      console.error('❌ OTP send error:', error.response?.data);
       const errorMessage = error.response?.data?.message || 'Failed to send OTP';
       
       if (error.response?.status === 429) {
-        const retryAfter = error.response.data?.retry_after || 30;
-        setTimer(retryAfter);
-        setCanResend(false);
+        const retryAfter = error.response.data?.retry_after || 60;
+        startTimer(retryAfter);
         showToast('error', `Too many requests. Please wait ${retryAfter} seconds`);
       } else if (error.response?.status === 500 && error.response.data?.error === 'phone number not registered') {
         Alert.alert(
@@ -94,22 +100,22 @@ const SendOTPScreen = () => {
       } else {
         showToast('error', errorMessage);
       }
-    },
-    onSettled: () => {
       setIsLoading(false);
     },
   });
 
   const handleSendOTP = () => {
-    if (!canResend && timer > 0) {
-      showToast('info', `Please wait ${timer} seconds before resending`);
+    if (resendCooldown > 0 && !isLoading) {
+      showToast('info', `Please wait ${resendCooldown} seconds before resending`);
       return;
     }
     setIsLoading(true);
+    console.log('📡 Sending OTP to:', phoneNumber);
     sendOTPMutation.mutate();
   };
 
   const handleVerifyOTP = () => {
+    console.log('➡️ Navigating to VerifyOTP with phone:', phoneNumber);
     navigation.navigate('VerifyOTP', { phoneNumber, adminId });
   };
 
@@ -120,11 +126,13 @@ const SendOTPScreen = () => {
   return (
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.logoContainer}>
           <PrayantraLogo size={100} />
@@ -134,7 +142,7 @@ const SendOTPScreen = () => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Verify Device</Text>
           <Text style={styles.subtitle}>
-            We've sent a 6-digit OTP to your registered phone number
+            {isLoading ? 'Sending OTP...' : 'We\'ve sent a 6-digit OTP to your registered phone number'}
           </Text>
 
           <View style={styles.phoneContainer}>
@@ -147,11 +155,13 @@ const SendOTPScreen = () => {
           </Text>
 
           <TouchableOpacity
-            style={[styles.verifyButton, isLoading && styles.buttonDisabled]}
+            style={[styles.verifyButton, (!hasSentInitialOTP || isLoading) && styles.buttonDisabled]}
             onPress={handleVerifyOTP}
-            disabled={isLoading}
+            disabled={!hasSentInitialOTP || isLoading}
           >
-            <Text style={styles.verifyButtonText}>Enter OTP</Text>
+            <Text style={styles.verifyButtonText}>
+              {!hasSentInitialOTP ? 'Sending OTP...' : 'Enter OTP'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.resendContainer}>
@@ -160,13 +170,14 @@ const SendOTPScreen = () => {
             </Text>
             <TouchableOpacity
               onPress={handleSendOTP}
-              disabled={!canResend || isLoading}
+              disabled={isLoading || resendCooldown > 0}
             >
               <Text style={[
                 styles.resendButton,
-                (!canResend || isLoading) && styles.resendButtonDisabled
+                (isLoading || resendCooldown > 0) && styles.resendButtonDisabled
               ]}>
-                {canResend ? 'Resend OTP' : `Resend in ${timer}s`}
+                {isLoading ? 'Sending...' : 
+                 resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -191,6 +202,7 @@ const SendOTPScreen = () => {
               • OTP is valid for 10 minutes
               {'\n'}• Never share OTP with anyone
               {'\n'}• This OTP is for device verification only
+              {'\n'}• Rate limit applies for OTP resend
             </Text>
           </View>
         </View>
@@ -217,7 +229,7 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     marginTop: 12,
   },
   formContainer: {
@@ -271,14 +283,14 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   verifyButton: {
-    backgroundColor: '#C084FC', // Purple
+    backgroundColor: '#C084FC',
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 20,
   },
   buttonDisabled: {
-    backgroundColor: '#D8B4FE', // Light purple
+    backgroundColor: '#D8B4FE',
   },
   verifyButtonText: {
     color: '#FFFFFF',
@@ -298,11 +310,11 @@ const styles = StyleSheet.create({
   },
   resendButton: {
     fontSize: 14,
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     fontWeight: '600',
   },
   resendButtonDisabled: {
-    color: '#D8B4FE', // Light purple
+    color: '#D8B4FE',
   },
   errorContainer: {
     backgroundColor: '#FEF2F2',
@@ -321,14 +333,14 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   backButton: {
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 24,
   },
   securityInfo: {
-    backgroundColor: '#FAF5FF', // Light purple
+    backgroundColor: '#FAF5FF',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
@@ -337,7 +349,7 @@ const styles = StyleSheet.create({
   securityTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#C084FC', // Purple
+    color: '#C084FC',
     marginBottom: 8,
   },
   securityText: {

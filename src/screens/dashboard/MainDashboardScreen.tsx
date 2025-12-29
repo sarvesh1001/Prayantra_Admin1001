@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { useNavigation, NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
@@ -21,10 +21,6 @@ import StatsOverview from '@/components/StatsOverview';
 
 const { width } = Dimensions.get('window');
 
-/* ============================================================
-   Navigation Types
-   ============================================================ */
-
 type RootStackParamList = {
   MainDashboard: undefined;
   Profile: undefined;
@@ -35,13 +31,9 @@ type RootStackParamList = {
 type MainDashboardScreenNavigationProp =
   NavigationProp<RootStackParamList, 'MainDashboard'>;
 
-/* ============================================================
-   Screen
-   ============================================================ */
-
 const MainDashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainDashboardScreenNavigationProp>();
-  const { adminInfo, logout } = useAuth();
+  const { adminInfo, logout, validateSession } = useAuth();
   const { showToast } = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -50,11 +42,62 @@ const MainDashboardScreen: React.FC = () => {
     remaining: 0,
     used: 0,
   });
+  const [isSessionValidated, setIsSessionValidated] = useState(false);
 
-  const { data: profileData, refetch, isLoading } = useQuery({
+  // Validate session on component mount
+  useEffect(() => {
+    const validateSessionOnMount = async () => {
+      try {
+        console.log('🔍 Validating session on dashboard mount...');
+        const isValid = await validateSession();
+        
+        if (!isValid) {
+          console.log('❌ Session invalid on dashboard mount');
+          showToast('error', 'Session expired. Please login again.');
+          // Clear session and navigate to VerifyMPIN
+          await logout();
+        } else {
+          console.log('✅ Session validated on dashboard mount');
+          setIsSessionValidated(true);
+        }
+      } catch (error) {
+        console.error('❌ Session validation error on dashboard:', error);
+        showToast('error', 'Session validation failed. Please login again.');
+        await logout();
+      }
+    };
+
+    validateSessionOnMount();
+  }, [validateSession, logout, showToast]);
+
+  // Validate session when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const validateOnFocus = async () => {
+        if (isSessionValidated) {
+          try {
+            console.log('🔍 Validating session on focus...');
+            const isValid = await validateSession();
+            
+            if (!isValid) {
+              console.log('❌ Session invalid on focus');
+              showToast('error', 'Session expired. Please login again.');
+              await logout();
+            }
+          } catch (error) {
+            console.error('❌ Session validation error on focus:', error);
+          }
+        }
+      };
+
+      validateOnFocus();
+    }, [validateSession, logout, showToast, isSessionValidated])
+  );
+
+  const { data: profileData, refetch, isLoading: profileLoading } = useQuery({
     queryKey: ['adminProfile'],
     queryFn: () => api.getAdminProfile(),
-    enabled: !!adminInfo,
+    enabled: !!adminInfo && isSessionValidated,
   });
 
   useEffect(() => {
@@ -90,6 +133,15 @@ const MainDashboardScreen: React.FC = () => {
       ],
     );
   };
+
+  // Show loading while validating session
+  if (!isSessionValidated) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Validating session...</Text>
+      </View>
+    );
+  }
 
   const departments: string[] = adminInfo?.departments || [];
 
@@ -129,7 +181,7 @@ const MainDashboardScreen: React.FC = () => {
           onPress={() => navigation.navigate('Profile')}
           style={styles.profileButton}
         >
-          <Icon name="account-circle" size={32} color="#C084FC" /> {/* Purple */}
+          <Icon name="account-circle" size={32} color="#C084FC" />
         </TouchableOpacity>
       </View>
 
@@ -140,8 +192,8 @@ const MainDashboardScreen: React.FC = () => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#C084FC']} // Purple
-            tintColor="#C084FC" // Purple
+            colors={['#C084FC']}
+            tintColor="#C084FC"
           />
         }
         showsVerticalScrollIndicator={false}
@@ -150,7 +202,7 @@ const MainDashboardScreen: React.FC = () => {
           dailyQuota={dailyQuota}
           permissions={adminInfo?.permissions?.length || 0}
           departments={departments.length}
-          isLoading={isLoading}
+          isLoading={profileLoading}
         />
 
         {/* ================= Quick Actions ================= */}
@@ -224,7 +276,7 @@ const MainDashboardScreen: React.FC = () => {
         {dailyQuota.limit > 0 && (
           <View style={styles.quotaContainer}>
             <View style={styles.quotaHeader}>
-              <Icon name="chart-bar" size={20} color="#C084FC" /> {/* Purple */}
+              <Icon name="chart-bar" size={20} color="#C084FC" />
               <Text style={styles.quotaTitle}>Daily API Quota</Text>
             </View>
 
@@ -264,13 +316,18 @@ const MainDashboardScreen: React.FC = () => {
 
 export default MainDashboardScreen;
 
-/* ============================================================
-   Styles
-   ============================================================ */
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#64748B',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,28 +338,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-
   headerTitleContainer: { flex: 1 },
-
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#1E293B',
   },
-
   headerSubtitle: {
     fontSize: 13,
     color: '#64748B',
     marginTop: 2,
   },
-
   profileButton: { padding: 8 },
-
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
-
   actionsContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -311,68 +362,56 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-
   actionButton: {
     width: '48%',
     alignItems: 'center',
     marginBottom: 16,
   },
-
   iconContainer: {
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#FAF5FF', // Light purple background
+    backgroundColor: '#FAF5FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#E9D5FF',
   },
-
   actionLabel: {
     fontSize: 13,
     color: '#475569',
     textAlign: 'center',
   },
-
   section: { marginTop: 24 },
-
   sectionHeader: { marginBottom: 16 },
-
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
     color: '#1E293B',
   },
-
   sectionSubtitle: {
     fontSize: 14,
     color: '#64748B',
     marginTop: 4,
   },
-
   categorySection: { marginBottom: 24 },
-
   categoryTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#475569',
     marginBottom: 12,
   },
-
   departmentsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginHorizontal: -6,
   },
-
   quotaContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -381,20 +420,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-
   quotaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-
   quotaTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1E293B',
     marginLeft: 8,
   },
-
   quotaBar: {
     height: 8,
     backgroundColor: '#E2E8F0',
@@ -402,28 +438,23 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 8,
   },
-
   quotaFill: {
     height: '100%',
-    backgroundColor: '#C084FC', // Purple
+    backgroundColor: '#C084FC',
     borderRadius: 4,
   },
-
   quotaInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-
   quotaText: {
     fontSize: 13,
     color: '#64748B',
   },
-
   footer: {
     marginTop: 32,
     alignItems: 'center',
   },
-
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,14 +464,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     marginBottom: 16,
   },
-
   logoutText: {
     color: '#DC2626',
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 8,
   },
-
   versionText: {
     fontSize: 12,
     color: '#94A3B8',

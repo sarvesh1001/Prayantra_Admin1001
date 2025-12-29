@@ -1,14 +1,23 @@
 import 'react-native-gesture-handler';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
-import { View, Text, StyleSheet } from 'react-native'; // Added missing imports
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  StatusBar as RNStatusBar
+} from 'react-native';
 import { QueryProvider } from './src/contexts/QueryProvider';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ToastProvider } from './src/components/Toast';
-import AppNavigator from './src/navigation/AppNavigator';
+import AppNavigator, { navigationRef } from './src/navigation/AppNavigator';
 import SplashScreen from './src/screens/SplashScreen';
 import { initializeDeviceInfo } from './src/services/deviceInfo';
 import * as SplashScreenModule from 'expo-splash-screen';
@@ -20,40 +29,75 @@ const App = () => {
   const [isReady, setIsReady] = useState(false);
   const [deviceInitialized, setDeviceInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
-    async function prepare() {
-      try {
-        await initializeDeviceInfo();
-        setDeviceInitialized(true);
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
 
-        // Simulate loading
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      } catch (e: any) {
-        console.error('App initialization failed:', e);
-        setError(e.message || 'Unknown error');
-      } finally {
-        setIsReady(true);
-        try {
-          await SplashScreenModule.hideAsync();
-        } catch (e) {
-          console.error('Failed to hide splash screen:', e);
-        }
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const prepare = useCallback(async () => {
+    try {
+      await initializeDeviceInfo();
+      setDeviceInitialized(true);
+
+      // Simulate loading
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    } catch (e: any) {
+      console.error('App initialization failed:', e);
+      setError(e.message || 'Unknown error');
+    } finally {
+      setIsReady(true);
+      try {
+        await SplashScreenModule.hideAsync();
+      } catch (e) {
+        console.error('Failed to hide splash screen:', e);
       }
     }
-
-    prepare();
   }, []);
+
+  useEffect(() => {
+    prepare();
+  }, [prepare]);
 
   // Show error screen
   if (error) {
     return (
       <SafeAreaProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={styles.errorContainer}>
+          <SafeAreaView style={[
+            styles.errorContainer,
+            { paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0 }
+          ]}>
             <Text style={styles.errorTitle}>Initialization Error</Text>
             <Text style={styles.errorText}>{error}</Text>
-          </View>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => {
+                setError(null);
+                setIsReady(false);
+                setDeviceInitialized(false);
+                prepare();
+              }}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
         </GestureHandlerRootView>
       </SafeAreaProvider>
     );
@@ -64,15 +108,21 @@ const App = () => {
     return <SplashScreen />;
   }
 
-  // Main app
+  // Main app with KeyboardAvoidingView for Android
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryProvider>
           <AuthProvider>
             <ToastProvider>
-              <NavigationContainer>
-                <AppNavigator />
+              <NavigationContainer ref={navigationRef}>
+                <KeyboardAvoidingView 
+                  style={{ flex: 1 }}
+                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+                >
+                  <AppNavigator />
+                </KeyboardAvoidingView>
               </NavigationContainer>
             </ToastProvider>
           </AuthProvider>
@@ -100,8 +150,20 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 16,
     color: '#7F1D1D',
-    marginBottom: 20,
+    marginBottom: 30,
     textAlign: 'center',
+    lineHeight: 24,
+  },
+  retryButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
