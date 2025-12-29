@@ -1,9 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useAuth } from '@/contexts/AuthContext';
-import { View, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { CommonActions, NavigationContainerRef } from '@react-navigation/native';
+import { View, ActivityIndicator } from 'react-native';
+import { NavigationContainerRef } from '@react-navigation/native';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
 // Screens

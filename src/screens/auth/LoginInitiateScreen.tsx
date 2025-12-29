@@ -190,16 +190,15 @@ const LoginInitiateScreen = () => {
       showToast('error', 'Please enter your phone number');
       return;
     }
-
-    // Validate phone number length based on country
+  
     const cleaned = phoneNumber.replace(/\D/g, '');
-    const minLength = selectedCountry.code === '+91' ? 10 : 7; // Adjust as needed
+    const minLength = selectedCountry.code === '+91' ? 10 : 7;
     
     if (cleaned.length < minLength) {
       showToast('error', `Please enter a valid ${selectedCountry.country} phone number`);
       return;
     }
-
+  
     setIsLoading(true);
     try {
       const response = await api.loginInitiate(fullPhoneNumber);
@@ -208,14 +207,24 @@ const LoginInitiateScreen = () => {
         has_mpin, 
         mpin_locked, 
         device_trusted,
-        user_id 
+        user_id,
+        flow_state
       } = response.data.data;
-
+      
+      console.log('✅ LoginInitiate response:', {
+        user_exists,
+        has_mpin,
+        mpin_locked,
+        device_trusted,
+        user_id,
+        flow_state
+      });
+  
       if (!user_exists) {
         showToast('error', 'Phone number not registered. Please contact your admin.');
         return;
       }
-
+  
       if (mpin_locked) {
         Alert.alert(
           'MPIN Locked',
@@ -224,35 +233,36 @@ const LoginInitiateScreen = () => {
         );
         return;
       }
-
-      // Navigate based on flow state
+  
+      // ✅ Store phone number temporarily in state, NOT in permanent storage yet
+      // We'll store it only after successful MPIN verification
       if (device_trusted && has_mpin) {
-        // Direct to MPIN verification
-        navigation.navigate('VerifyMPIN', { 
+        console.log('➡️ Navigating to VerifyMPIN');
+        navigation.navigate('VerifyMPIN', {
           phoneNumber: fullPhoneNumber,
-          adminId: user_id 
+          adminId: user_id
         });
       } else if (!device_trusted) {
-        // Send OTP for device verification
-        navigation.navigate('SendOTP', { 
+        console.log('➡️ Navigating to SendOTP');
+        navigation.navigate('SendOTP', {
           phoneNumber: fullPhoneNumber,
-          adminId: user_id 
+          adminId: user_id
         });
       } else if (!has_mpin) {
-        // Setup MPIN
-        navigation.navigate('SetupMPIN', { 
+        console.log('➡️ Navigating to SetupMPIN');
+        navigation.navigate('SetupMPIN', {
           phoneNumber: fullPhoneNumber,
-          adminId: user_id 
+          adminId: user_id
         });
       }
     } catch (error: any) {
+      console.error('❌ LoginInitiate error:', error);
       const errorMessage = error.response?.data?.message || 'Login failed. Please try again.';
       showToast('error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
-
   const renderCountryItem = ({ item }: { item: CountryCode }) => (
     <TouchableOpacity
       style={[

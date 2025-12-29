@@ -5,10 +5,12 @@ import {
   getItem, 
   setItem, 
   removeItem, 
-  clearSessionData,
   STORAGE_KEYS,
   hasStoredPhoneNumber,
-  getFormattedPhoneNumber
+  getFormattedPhoneNumber,
+  storePhoneNumberPermanently,
+  removePhoneNumberPermanently,
+  clearSessionData
 } from '@/services/storage';
 import { getStoredDeviceInfo } from '@/services/deviceInfo';
 import { useQueryClient } from '@tanstack/react-query';
@@ -116,11 +118,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Store full phone number without spaces in format +919876543210
       const formattedPhone = phone.replace(/\s/g, '');
-      await setItem(STORAGE_KEYS.PHONE_NUMBER, formattedPhone);
       
       if (adminId) {
-        await setItem(STORAGE_KEYS.ADMIN_ID, adminId);
+        // Store phone number PERMANENTLY for auto-login feature
+        await storePhoneNumberPermanently(formattedPhone, adminId);
         setAdminId(adminId);
+      } else {
+        // Just store phone number temporarily
+        await setItem(STORAGE_KEYS.PHONE_NUMBER, formattedPhone);
       }
       
       setPhoneNumber(formattedPhone);
@@ -132,11 +137,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearPhoneNumber = useCallback(async () => {
     try {
-      await removeItem(STORAGE_KEYS.PHONE_NUMBER);
-      await removeItem(STORAGE_KEYS.ADMIN_ID);
+      await removePhoneNumberPermanently();
       setPhoneNumber(null);
       setAdminId(null);
-      console.log('✅ [AUTH] Phone number cleared');
+      console.log('✅ [AUTH] Phone number cleared permanently');
     } catch (error) {
       console.error('❌ [AUTH] Error clearing phone number:', error);
     }
@@ -147,9 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       // Clear only tokens, keep phone number and admin ID for VerifyMPIN
-      await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-      await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-      await removeItem(STORAGE_KEYS.ADMIN_INFO);
+      await clearSessionData();
       
       queryClient.clear();
       
@@ -159,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setTokens(null);
       setLoginFlow(null);
       
-      console.log('✅ [AUTH] Tokens cleared, ready for VerifyMPIN');
+      console.log('✅ [AUTH] Tokens cleared, phone number preserved for VerifyMPIN');
     } catch (error) {
       console.error('❌ [AUTH] Error clearing tokens:', error);
     }
@@ -171,7 +173,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsInitializing(true);
       setIsLoading(true);
       
-      // Check if we have stored phone number
+      // Clear ALL tokens on app start - don't validate old sessions
+      console.log('🧹 [AUTH] Clearing all tokens on app start...');
+      await clearSessionData();
+      
+      // Check if we have stored phone number PERMANENTLY
       const hasPhone = await hasStoredPhoneNumber();
       const formattedPhone = await getFormattedPhoneNumber();
       
@@ -190,57 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAdminId(storedAdminId);
         }
         
-        // Check for session data
-        const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
-        const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
-        const storedAdminInfo = await getItem(STORAGE_KEYS.ADMIN_INFO);
-        
-        console.log('🔍 [AUTH] Checking stored session data:', {
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken,
-          hasAdminInfo: !!storedAdminInfo,
-          accessTokenLength: accessToken?.length || 0,
-          refreshTokenLength: refreshToken?.length || 0
-        });
-        
-        // If we have all required tokens and admin info, validate session
-        if (accessToken && refreshToken && storedAdminInfo) {
-          console.log('🔐 [AUTH] Found stored session, validating...');
-          
-          try {
-            const adminInfoData = JSON.parse(storedAdminInfo);
-            const tokensData: AuthTokens = {
-              access_token: accessToken,
-              refresh_token: refreshToken,
-              expires_in: 900,
-              token_type: 'Bearer'
-            };
-            
-            // Validate session before setting state
-            const isValid = await validateSession();
-            
-            if (isValid) {
-              // Set state first
-              setAdminInfo(adminInfoData);
-              setTokens(tokensData);
-              setIsAuthenticated(true);
-              
-              // Start token refresh
-              startTokenRefresh();
-              console.log('✅ [AUTH] Authentication restored successfully');
-            } else {
-              console.log('❌ [AUTH] Stored session is invalid');
-              await clearTokensAndNavigate();
-            }
-          } catch (error) {
-            console.error('❌ [AUTH] Error parsing stored data:', error);
-            await clearTokensAndNavigate();
-          }
-        } else {
-          // Missing required data, not authenticated
-          console.log('❌ [AUTH] Missing authentication data');
-          setIsAuthenticated(false);
-        }
+        console.log('✅ [AUTH] Phone number found, NOT authenticated - will go to VerifyMPIN');
+        setIsAuthenticated(false);
       } else {
         // No phone number stored
         console.log('❌ [AUTH] No phone number stored in permanent storage');
@@ -254,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
       setIsInitializing(false);
     }
-  }, [validateSession, clearTokensAndNavigate]);
+  }, []);
 
   useEffect(() => {
     console.log('🚀 [AUTH] AuthProvider mounted, initializing auth...');
@@ -308,17 +265,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log('🔐 [AUTH] Refresh Token (first 20 chars):', tokensData.refresh_token.substring(0, 20));
       console.log('👤 [AUTH] Admin ID:', adminInfoData.admin_id);
       
-      // Store tokens and admin info
+      // Store tokens and admin info (temporary - for current session only)
       await setItem(STORAGE_KEYS.ACCESS_TOKEN, tokensData.access_token);
       await setItem(STORAGE_KEYS.REFRESH_TOKEN, tokensData.refresh_token);
       await setItem(STORAGE_KEYS.ADMIN_INFO, JSON.stringify(adminInfoData));
       
-      if (adminInfoData?.admin_id) {
-        await setItem(STORAGE_KEYS.ADMIN_ID, adminInfoData.admin_id);
-      }
-
-      // Store phone number permanently without spaces
-      await storePhoneNumber(phone, adminInfoData.admin_id);
+      // Store phone number PERMANENTLY for auto-login (only phone number, not tokens)
+      await storePhoneNumberPermanently(phone, adminInfoData.admin_id);
 
       // Verify storage
       const storedAccessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
@@ -334,7 +287,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         accessTokenMatch: storedAccessToken?.substring(0, 50) === tokensData.access_token.substring(0, 50)
       });
 
-      // Set state WITHOUT validating session immediately
+      // Set state
       setPhoneNumber(phone.replace(/\s/g, ''));
       setTokens(tokensData);
       setAdminInfo(adminInfoData);
@@ -348,7 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('❌ [AUTH] Login error:', error);
       throw error;
     }
-  }, [storePhoneNumber, startTokenRefresh]);
+  }, [startTokenRefresh]);
 
   const logout = useCallback(async () => {
     console.log('🚪 [AUTH] Logging out...');
@@ -361,26 +314,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('❌ [AUTH] Logout API error:', error);
     } finally {
-      console.log('🧹 [AUTH] Clearing all auth data...');
+      console.log('🧹 [AUTH] Clearing all auth data but keeping phone number...');
       
-      // Clear ALL auth data including phone number for logout scenario
-      await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-      await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-      await removeItem(STORAGE_KEYS.ADMIN_INFO);
-      await removeItem(STORAGE_KEYS.ADMIN_ID);
-      await removeItem(STORAGE_KEYS.PHONE_NUMBER);
+      // Clear ONLY tokens and admin info, KEEP phone number and admin ID
+      await clearSessionData();
       
       queryClient.clear();
       
-      // Reset all state
+      // Reset auth state but keep phone number for VerifyMPIN
       setIsAuthenticated(false);
       setAdminInfo(null);
       setTokens(null);
       setLoginFlow(null);
-      setPhoneNumber(null);
-      setAdminId(null);
       
-      console.log('✅ [AUTH] Logout complete - All auth data cleared');
+      console.log('✅ [AUTH] Logout complete - Phone number preserved for auto-login');
     }
   }, [queryClient]);
 

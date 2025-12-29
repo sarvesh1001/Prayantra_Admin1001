@@ -19,7 +19,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import PrayantraLogo from '@/components/PrayantraLogo';
 import MPINInput, { MPINInputRef } from '@/components/MPINInput';
-import { getFormattedPhoneNumber, hasStoredPhoneNumber } from '@/services/storage';
+import {
+  hasStoredPhoneNumber,
+  getFormattedPhoneNumber,
+  getDisplayPhoneNumber
+} from '@/services/storage';
 
 const { height } = Dimensions.get('window');
 
@@ -49,6 +53,7 @@ const VerifyMPINScreen = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [lockTime, setLockTime] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [displayPhoneNumber, setDisplayPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPhone, setIsLoadingPhone] = useState(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -59,33 +64,43 @@ const VerifyMPINScreen = () => {
     const loadPhoneNumber = async () => {
       setIsLoadingPhone(true);
       try {
+        console.log('📱 [VERIFY_MPIN] Loading phone number from params:', params);
+        
+        // FIRST: Check if we have phone number from params (coming from LoginInitiate)
         if (params?.phoneNumber) {
           setPhoneNumber(params.phoneNumber);
+          setDisplayPhoneNumber(formatPhoneForDisplay(params.phoneNumber));
+          console.log('✅ [VERIFY_MPIN] Using phone number from params:', params.phoneNumber);
+          setIsLoadingPhone(false);
+          return;
+        }
+        
+        // SECOND: If no params, check if we have stored phone number
+        console.log('🔍 [VERIFY_MPIN] No params, checking stored phone number...');
+        const hasPhone = await hasStoredPhoneNumber();
+        const formattedPhone = await getFormattedPhoneNumber();
+        const displayPhone = await getDisplayPhoneNumber();
+        
+        console.log('📱 [VERIFY_MPIN] Storage check:', {
+          hasPhone,
+          formattedPhone,
+          displayPhone
+        });
+        
+        if (hasPhone && formattedPhone) {
+          setPhoneNumber(formattedPhone);
+          setDisplayPhoneNumber(displayPhone || formattedPhone);
+          console.log('✅ [VERIFY_MPIN] Using stored phone number:', formattedPhone);
         } else {
-          const hasPhone = await hasStoredPhoneNumber();
-          if (hasPhone) {
-            const storedPhone = await getFormattedPhoneNumber();
-            if (storedPhone) {
-              setPhoneNumber(storedPhone);
-            } else {
-              // If no phone number is available, navigate to LoginInitiate
-              showToast('error', 'Phone number not found. Please login again.');
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'LoginInitiate' }],
-              });
-            }
-          } else {
-            // If no phone number is available, navigate to LoginInitiate
-            showToast('info', 'Please login with your phone number');
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'LoginInitiate' }],
-            });
-          }
+          console.log('❌ [VERIFY_MPIN] No phone number found, redirecting to LoginInitiate');
+          showToast('info', 'Please login with your phone number');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'LoginInitiate' }],
+          });
         }
       } catch (error) {
-        console.error('Error loading phone number:', error);
+        console.error('❌ [VERIFY_MPIN] Error loading phone number:', error);
         showToast('error', 'Error loading phone number');
         navigation.reset({
           index: 0,
@@ -136,14 +151,24 @@ const VerifyMPINScreen = () => {
     }
   }, [isLocked, lockTime]);
 
+  // Helper function to format phone number for display
+  const formatPhoneForDisplay = (phone: string) => {
+    if (!phone) return '';
+    // If phone is in format +919876543210, format to +91 98765 43210
+    const countryCode = phone.substring(0, 3);
+    const remaining = phone.substring(3);
+    if (remaining.length === 10) {
+      return `${countryCode} ${remaining.substring(0, 5)} ${remaining.substring(5)}`;
+    }
+    return phone;
+  };
+
   const mutation = useMutation({
     mutationFn: (mpin: string) => api.verifyMPIN(phoneNumber, mpin),
     onSuccess: (response: any) => {
       console.log('✅ MPIN verification response:', response.data);
-      
       if (response.data.success) {
         const { admin, tokens, message } = response.data.data;
-        
         console.log('🔐 Tokens received:', {
           accessTokenLength: tokens?.access_token?.length || 0,
           refreshTokenLength: tokens?.refresh_token?.length || 0,
@@ -157,12 +182,11 @@ const VerifyMPINScreen = () => {
           return;
         }
         
-        // Login success - tokens will be stored by AuthContext
+        // ✅ Store phone number ONLY after successful MPIN verification
+        // The login function in AuthContext will handle storage
         login(phoneNumber, tokens, admin);
-        
         showToast('success', message || 'Login successful');
         
-        // Navigate to MainDrawer
         navigation.reset({
           index: 0,
           routes: [{ name: 'MainDrawer' }],
@@ -207,8 +231,6 @@ const VerifyMPINScreen = () => {
       }
       
       showToast('error', errorMessage);
-      
-      // Clear MPIN after error
       setMpin('');
       mpinInputRef.current?.clearAll();
     },
@@ -304,7 +326,7 @@ const VerifyMPINScreen = () => {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Enter MPIN</Text>
           <Text style={styles.subtitle}>
-            {phoneNumber ? `Enter MPIN for ${phoneNumber}` : 'Enter your 6-digit MPIN'}
+            {displayPhoneNumber ? `Enter MPIN for ${displayPhoneNumber}` : 'Enter your 6-digit MPIN'}
           </Text>
 
           <MPINInput
@@ -345,13 +367,15 @@ const VerifyMPINScreen = () => {
               <Text style={styles.actionText}>Forgot MPIN?</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleRemovePhoneNumber}
-              disabled={isLoading}
-            >
-              <Text style={styles.actionText}>Remove Number</Text>
-            </TouchableOpacity>
+            {!params?.phoneNumber && ( // Only show remove button if using stored number
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleRemovePhoneNumber}
+                disabled={isLoading}
+              >
+                <Text style={styles.actionText}>Remove Number</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.actionButton}
@@ -368,6 +392,7 @@ const VerifyMPINScreen = () => {
           <Text style={styles.securityTip}>• Never share your MPIN with anyone</Text>
           <Text style={styles.securityTip}>• Change your MPIN regularly</Text>
           <Text style={styles.securityTip}>• Use a unique MPIN not used elsewhere</Text>
+          <Text style={styles.securityTip}>• Your phone number is stored for auto-login</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

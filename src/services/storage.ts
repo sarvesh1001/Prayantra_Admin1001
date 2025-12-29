@@ -103,6 +103,61 @@ export const getFormattedPhoneNumber = async (): Promise<string | null> => {
   }
 };
 
+// Get phone number with spaces for display
+export const getDisplayPhoneNumber = async (): Promise<string | null> => {
+  try {
+    const phoneNumber = await getItem(STORAGE_KEYS.PHONE_NUMBER);
+    if (!phoneNumber) return null;
+    
+    // Format: +91 98765 43210
+    const countryCode = phoneNumber.substring(0, 3); // +91
+    const remaining = phoneNumber.substring(3);
+    
+    if (remaining.length === 10) {
+      return `${countryCode} ${remaining.substring(0, 5)} ${remaining.substring(5)}`;
+    }
+    
+    return phoneNumber;
+  } catch (error) {
+    return null;
+  }
+};
+
+// Store phone number permanently (for auto-login feature)
+export const storePhoneNumberPermanently = async (phoneNumber: string, adminId: string): Promise<void> => {
+  try {
+    // Remove all spaces and store in format: +919876543210
+    const formattedPhone = phoneNumber.replace(/\s/g, '');
+    
+    console.log('🔐 [STORAGE] Storing phone number permanently:', {
+      original: phoneNumber,
+      formatted: formattedPhone,
+      adminId
+    });
+    
+    await setItem(STORAGE_KEYS.PHONE_NUMBER, formattedPhone);
+    await setItem(STORAGE_KEYS.ADMIN_ID, adminId);
+    
+    console.log('✅ [STORAGE] Phone number stored permanently');
+  } catch (error) {
+    console.error('❌ [STORAGE] Error storing phone number:', error);
+    throw error;
+  }
+};
+
+// Remove phone number permanently (when user explicitly removes it)
+export const removePhoneNumberPermanently = async (): Promise<void> => {
+  try {
+    console.log('🔐 [STORAGE] Removing phone number permanently');
+    await removeItem(STORAGE_KEYS.PHONE_NUMBER);
+    await removeItem(STORAGE_KEYS.ADMIN_ID);
+    console.log('✅ [STORAGE] Phone number removed permanently');
+  } catch (error) {
+    console.error('❌ [STORAGE] Error removing phone number:', error);
+    throw error;
+  }
+};
+
 // Storage keys based on your API responses
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'access_token',

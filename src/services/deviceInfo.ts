@@ -7,6 +7,7 @@ import { getItem, setItem } from './storage';
 
 // Keychain/Keystore keys
 const SECURE_DEVICE_ID_KEY = 'prayantra_persistent_device_id';
+const SECURE_DEVICE_FINGERPRINT_KEY = 'prayantra_persistent_device_fingerprint';
 
 export interface DeviceInfo {
   deviceId: string;
@@ -33,50 +34,57 @@ const generateSecureUserAgent = (): string => {
 
 export const getDeviceInfo = async (): Promise<DeviceInfo> => {
   try {
-    // Generate or retrieve device ID
+    // Generate or retrieve device ID from SecureStore
     let deviceId = await SecureStore.getItemAsync(SECURE_DEVICE_ID_KEY);
     
     if (!deviceId) {
-      const randomBytes = Crypto.getRandomBytes(32);
-      const timestamp = Date.now().toString(36);
-      const uniqueString = `${Device.modelName}-${Device.brand}-${Platform.OS}-${timestamp}-${Array.from(randomBytes).join('')}`;
+      // Create a STATIC device ID that doesn't change
+      const deviceType = await Device.getDeviceTypeAsync();
+      const osVersion = Device.osVersion || 'Unknown';
+      const deviceModel = Device.modelName || 'Unknown';
+      const deviceBrand = Device.brand || 'Unknown';
+      
+      // Create a deterministic hash from static device properties
+      const staticString = `${deviceModel}-${deviceBrand}-${Platform.OS}-${osVersion}-${deviceType}`;
       const deviceHash = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
-        uniqueString
+        staticString
       );
       
-      deviceId = `prayantra-${Platform.OS}-${deviceHash.substring(0, 16)}`;
+      // Use first 24 chars for device ID (makes it stable)
+      deviceId = `prayantra-${Platform.OS}-${deviceHash.substring(0, 24)}`;
       await SecureStore.setItemAsync(SECURE_DEVICE_ID_KEY, deviceId);
+      console.log('🆕 [DEVICE] Generated NEW static device ID:', deviceId);
+    } else {
+      console.log('✅ [DEVICE] Using existing device ID:', deviceId);
     }
 
-    // Generate device fingerprint
-    const fingerprintData = {
-      device_id: deviceId,
-      device_model: Device.modelName || 'Unknown',
-      device_brand: Device.brand || 'Unknown',
-      platform: Platform.OS,
-      os_version: Device.osVersion || 'Unknown',
-      is_emulator: !Device.isDevice,
-      timestamp: new Date().toISOString()
-    };
-
-    const deviceFingerprint = JSON.stringify(fingerprintData);
-    const userAgent = generateSecureUserAgent();
-
-    // Check biometric capabilities
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    const isBiometricSupported = hasHardware && isEnrolled;
+    // Generate or retrieve device fingerprint from SecureStore
+    let deviceFingerprint = await SecureStore.getItemAsync(SECURE_DEVICE_FINGERPRINT_KEY);
     
-    let biometricType = 'none';
-    if (isBiometricSupported) {
-      const supportedBiometrics = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      if (supportedBiometrics.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-        biometricType = 'fingerprint';
-      } else if (supportedBiometrics.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-        biometricType = 'face_id';
-      }
+    if (!deviceFingerprint) {
+      // Create a STATIC fingerprint without timestamp
+      const fingerprintData = {
+        device_id: deviceId,
+        device_model: Device.modelName || 'Unknown',
+        device_brand: Device.brand || 'Unknown',
+        platform: Platform.OS,
+        os_version: Device.osVersion || 'Unknown',
+        device_type: await Device.getDeviceTypeAsync(),
+        is_emulator: !Device.isDevice,
+        // Static properties only - NO timestamp
+        app_version: '1.0.0',
+        app_build: '1'
+      };
+
+      deviceFingerprint = JSON.stringify(fingerprintData);
+      await SecureStore.setItemAsync(SECURE_DEVICE_FINGERPRINT_KEY, deviceFingerprint);
+      console.log('🆕 [DEVICE] Generated NEW static device fingerprint');
+    } else {
+      console.log('✅ [DEVICE] Using existing device fingerprint');
     }
+
+    const userAgent = generateSecureUserAgent();
 
     // Store in AsyncStorage for quick access
     await setItem('device_id', deviceId);
@@ -87,17 +95,24 @@ export const getDeviceInfo = async (): Promise<DeviceInfo> => {
       deviceId,
       deviceFingerprint,
       userAgent,
-      biometricType,
-      isBiometricSupported,
+      biometricType: 'none',
+      isBiometricSupported: false,
       secureStorageAvailable: true,
     };
   } catch (error) {
-    console.error('Device info generation failed:', error);
-    // Fallback
-    const fallbackId = `prayantra-${Platform.OS}-${Date.now()}`;
+    console.error('❌ [DEVICE] Device info generation failed:', error);
+    
+    // Static fallback
+    const fallbackId = `prayantra-${Platform.OS}-static-fallback`;
+    const fallbackFingerprint = JSON.stringify({ 
+      device_id: fallbackId,
+      platform: Platform.OS,
+      is_fallback: true 
+    });
+    
     return {
       deviceId: fallbackId,
-      deviceFingerprint: JSON.stringify({ device_id: fallbackId }),
+      deviceFingerprint: fallbackFingerprint,
       userAgent: generateSecureUserAgent(),
       biometricType: 'none',
       isBiometricSupported: false,
@@ -108,14 +123,30 @@ export const getDeviceInfo = async (): Promise<DeviceInfo> => {
 
 export const getStoredDeviceInfo = async (): Promise<DeviceInfo> => {
   try {
-    const deviceId = await getItem('device_id') || '';
-    const deviceFingerprint = await getItem('device_fingerprint') || '';
-    const userAgent = await getItem('user_agent') || generateSecureUserAgent();
-
+    // FIRST: Check SecureStore (primary source of truth)
+    let deviceId = await SecureStore.getItemAsync(SECURE_DEVICE_ID_KEY);
+    let deviceFingerprint = await SecureStore.getItemAsync(SECURE_DEVICE_FINGERPRINT_KEY);
+    
+    // SECOND: If not in SecureStore, check AsyncStorage (fallback cache)
     if (!deviceId || !deviceFingerprint) {
-      return getDeviceInfo();
+      console.log('🔄 [DEVICE] No device info in SecureStore, checking AsyncStorage...');
+      deviceId = await getItem('device_id') || '';
+      deviceFingerprint = await getItem('device_fingerprint') || '';
+    }
+    
+    // THIRD: If still not found, generate NEW device info
+    if (!deviceId || !deviceFingerprint) {
+      console.log('🆕 [DEVICE] No stored device info found, generating new...');
+      const newDeviceInfo = await getDeviceInfo();
+      
+      // Return the newly generated info
+      return newDeviceInfo;
     }
 
+    console.log('✅ [DEVICE] Using stored device info');
+    
+    const userAgent = await getItem('user_agent') || generateSecureUserAgent();
+    
     return {
       deviceId,
       deviceFingerprint,
@@ -125,7 +156,7 @@ export const getStoredDeviceInfo = async (): Promise<DeviceInfo> => {
       secureStorageAvailable: true,
     };
   } catch (error) {
-    console.error('Error getting stored device info:', error);
+    console.error('❌ [DEVICE] Error getting stored device info:', error);
     return getDeviceInfo();
   }
 };
@@ -133,9 +164,49 @@ export const getStoredDeviceInfo = async (): Promise<DeviceInfo> => {
 export const initializeDeviceInfo = async (): Promise<void> => {
   console.log("🚀 INITIALIZING DEVICE INFORMATION...");
   try {
-    await getDeviceInfo();
-    console.log("✅ DEVICE INFORMATION INITIALIZED");
+    const deviceInfo = await getDeviceInfo();
+    console.log("✅ DEVICE INFORMATION INITIALIZED:", {
+      deviceId: deviceInfo.deviceId,
+      fingerprintLength: deviceInfo.deviceFingerprint.length,
+      userAgent: deviceInfo.userAgent
+    });
   } catch (error) {
     console.error("❌ DEVICE INITIALIZATION FAILED:", error);
+  }
+};
+
+// Debug helper function to check current device info
+export const debugDeviceInfo = async (): Promise<void> => {
+  console.log('🔍 [DEVICE DEBUG] Current device info:');
+  
+  const secureId = await SecureStore.getItemAsync(SECURE_DEVICE_ID_KEY);
+  const secureFp = await SecureStore.getItemAsync(SECURE_DEVICE_FINGERPRINT_KEY);
+  const asyncId = await getItem('device_id');
+  const asyncFp = await getItem('device_fingerprint');
+  
+  console.log('SecureStore Device ID:', secureId);
+  console.log('SecureStore Fingerprint:', secureFp?.substring(0, 100) + '...');
+  console.log('AsyncStorage Device ID:', asyncId);
+  console.log('AsyncStorage Fingerprint:', asyncFp?.substring(0, 100) + '...');
+  
+  // Get current device info
+  const currentInfo = await getStoredDeviceInfo();
+  console.log('Current Device Info:', {
+    deviceId: currentInfo.deviceId,
+    fingerprintPreview: currentInfo.deviceFingerprint.substring(0, 100) + '...',
+    userAgent: currentInfo.userAgent
+  });
+};
+
+// Reset device info (only for testing or troubleshooting)
+export const resetDeviceInfo = async (): Promise<void> => {
+  try {
+    console.log("🔄 [DEVICE] Resetting device info...");
+    await SecureStore.deleteItemAsync(SECURE_DEVICE_ID_KEY);
+    await SecureStore.deleteItemAsync(SECURE_DEVICE_FINGERPRINT_KEY);
+    await getDeviceInfo(); // This will generate new ones
+    console.log("✅ [DEVICE] Device info reset complete");
+  } catch (error) {
+    console.error("❌ [DEVICE] Error resetting device info:", error);
   }
 };
