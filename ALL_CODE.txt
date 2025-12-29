@@ -1798,28 +1798,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const validateSession = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('🔍 Validating session...');
+      console.log('🔍 [AUTH] Validating session...');
+      
+      // First check if we have an access token
       const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      console.log('🔐 [AUTH] Access token check:', {
+        hasToken: !!accessToken,
+        tokenLength: accessToken?.length || 0,
+        tokenPreview: accessToken ? `${accessToken.substring(0, 30)}...` : 'NONE'
+      });
       
       if (!accessToken) {
-        console.log('❌ No access token found for validation');
+        console.log('❌ [AUTH] No access token found for validation');
         return false;
       }
 
-      const response = await api.validateSession();
-      const { valid } = response.data.data;
+      // Decode JWT to check expiration
+      try {
+        const payload = JSON.parse(atob(accessToken.split('.')[1]));
+        const exp = payload.exp * 1000; // Convert to milliseconds
+        const now = Date.now();
+        console.log('⏰ [AUTH] Token expiry check:', {
+          expiryTime: new Date(exp).toISOString(),
+          currentTime: new Date(now).toISOString(),
+          expiresIn: Math.floor((exp - now) / 1000) + ' seconds',
+          isExpired: now >= exp
+        });
+        
+        if (now >= exp) {
+          console.log('❌ [AUTH] Token has expired');
+          return false;
+        }
+      } catch (decodeError) {
+        console.warn('⚠️ [AUTH] Could not decode token:', decodeError);
+      }
+
+      // Wait a moment to ensure token is fully processed
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      console.log('✅ Session validation result:', valid);
+      console.log('📡 [AUTH] Calling validateSession API...');
+      const response = await api.validateSession();
+      console.log('✅ [AUTH] Session validation response:', response.data);
+      
+      const { valid } = response.data.data;
+      console.log('✅ [AUTH] Session validation result:', valid);
       return valid;
     } catch (error: any) {
-      console.error('❌ Session validation error:', error.response?.data || error.message);
+      console.error('❌ [AUTH] Session validation error:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message,
+        url: error.config?.url,
+        headers: error.config?.headers
+      });
       return false;
     }
   }, []);
 
   const storePhoneNumber = useCallback(async (phone: string, adminId?: string) => {
     try {
-      console.log('🔐 Storing phone number:', phone, 'adminId:', adminId);
+      console.log('🔐 [AUTH] Storing phone number:', phone, 'adminId:', adminId);
       
       // Store full phone number without spaces in format +919876543210
       const formattedPhone = phone.replace(/\s/g, '');
@@ -1831,9 +1869,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       setPhoneNumber(formattedPhone);
-      console.log('✅ Phone number stored successfully:', formattedPhone);
+      console.log('✅ [AUTH] Phone number stored successfully:', formattedPhone);
     } catch (error) {
-      console.error('❌ Error storing phone number:', error);
+      console.error('❌ [AUTH] Error storing phone number:', error);
     }
   }, []);
 
@@ -1843,15 +1881,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await removeItem(STORAGE_KEYS.ADMIN_ID);
       setPhoneNumber(null);
       setAdminId(null);
-      console.log('✅ Phone number cleared');
+      console.log('✅ [AUTH] Phone number cleared');
     } catch (error) {
-      console.error('❌ Error clearing phone number:', error);
+      console.error('❌ [AUTH] Error clearing phone number:', error);
     }
   }, []);
 
   const initializeAuth = useCallback(async () => {
     try {
-      console.log('🔄 Initializing authentication...');
+      console.log('🔄 [AUTH] Initializing authentication...');
       setIsInitializing(true);
       setIsLoading(true);
       
@@ -1859,7 +1897,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const hasPhone = await hasStoredPhoneNumber();
       const formattedPhone = await getFormattedPhoneNumber();
       
-      console.log('📱 Stored phone check:', { 
+      console.log('📱 [AUTH] Stored phone check:', { 
         hasPhone, 
         formattedPhone,
         phoneNumber: await getItem(STORAGE_KEYS.PHONE_NUMBER),
@@ -1879,7 +1917,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
         const storedAdminInfo = await getItem(STORAGE_KEYS.ADMIN_INFO);
         
-        console.log('🔍 Checking stored session data:', {
+        console.log('🔍 [AUTH] Checking stored session data:', {
           hasAccessToken: !!accessToken,
           hasRefreshToken: !!refreshToken,
           hasAdminInfo: !!storedAdminInfo,
@@ -1889,7 +1927,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // If we have all required tokens and admin info, validate session
         if (accessToken && refreshToken && storedAdminInfo) {
-          console.log('🔐 Found stored session, validating...');
+          console.log('🔐 [AUTH] Found stored session, validating...');
           
           try {
             const adminInfoData = JSON.parse(storedAdminInfo);
@@ -1907,9 +1945,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             // Start token refresh
             startTokenRefresh();
-            console.log('✅ Authentication restored successfully');
+            console.log('✅ [AUTH] Authentication restored successfully');
           } catch (error) {
-            console.error('❌ Error parsing stored data:', error);
+            console.error('❌ [AUTH] Error parsing stored data:', error);
             await clearSessionData();
             setAdminInfo(null);
             setTokens(null);
@@ -1917,34 +1955,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } else {
           // Missing required data, not authenticated
-          console.log('❌ Missing authentication data');
+          console.log('❌ [AUTH] Missing authentication data');
           setIsAuthenticated(false);
         }
       } else {
         // No phone number stored
-        console.log('❌ No phone number stored in permanent storage');
+        console.log('❌ [AUTH] No phone number stored in permanent storage');
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('❌ Auth initialization error:', error);
+      console.error('❌ [AUTH] Auth initialization error:', error);
       setIsAuthenticated(false);
     } finally {
-      console.log('✅ Auth initialization complete');
+      console.log('✅ [AUTH] Auth initialization complete');
       setIsLoading(false);
       setIsInitializing(false);
     }
   }, []);
 
   useEffect(() => {
-    console.log('🚀 AuthProvider mounted, initializing auth...');
+    console.log('🚀 [AUTH] AuthProvider mounted, initializing auth...');
     initializeAuth();
   }, [initializeAuth]);
 
   const startTokenRefresh = useCallback(() => {
-    console.log('🔄 Starting token refresh interval');
+    console.log('🔄 [AUTH] Starting token refresh interval');
     const refreshInterval = setInterval(async () => {
       try {
-        console.log('🔄 Refreshing token...');
+        console.log('🔄 [AUTH] Refreshing token...');
         const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
         if (refreshToken) {
           const response = await api.refreshToken(refreshToken);
@@ -1958,10 +1996,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           
           setTokens(newTokens);
-          console.log('✅ Token refreshed successfully');
+          console.log('✅ [AUTH] Token refreshed successfully');
         }
       } catch (error) {
-        console.error('❌ Token refresh failed:', error);
+        console.error('❌ [AUTH] Token refresh failed:', error);
       }
     }, 4.5 * 60 * 1000); // Refresh every 4.5 minutes
 
@@ -1974,18 +2012,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     adminInfoData: AdminInfo
   ) => {
     try {
-      console.log('🔐 Login attempt for phone:', phone);
+      console.log('🔐 [AUTH] Login attempt for phone:', phone);
       
       // Validate tokens before storing
       if (!tokensData?.access_token || !tokensData?.refresh_token) {
-        console.error('❌ Invalid tokens received:', tokensData);
+        console.error('❌ [AUTH] Invalid tokens received:', tokensData);
         throw new Error('Invalid tokens received');
       }
 
-      console.log('📝 Storing tokens and admin info...');
-      console.log('🔐 Access Token (first 20 chars):', tokensData.access_token.substring(0, 20));
-      console.log('🔐 Refresh Token (first 20 chars):', tokensData.refresh_token.substring(0, 20));
-      console.log('👤 Admin ID:', adminInfoData.admin_id);
+      console.log('📝 [AUTH] Storing tokens and admin info...');
+      console.log('🔐 [AUTH] Access Token (first 50 chars):', tokensData.access_token.substring(0, 50));
+      console.log('🔐 [AUTH] Refresh Token (first 20 chars):', tokensData.refresh_token.substring(0, 20));
+      console.log('👤 [AUTH] Admin ID:', adminInfoData.admin_id);
       
       // Store tokens and admin info
       await setItem(STORAGE_KEYS.ACCESS_TOKEN, tokensData.access_token);
@@ -2004,12 +2042,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedRefreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
       const storedAdminInfo = await getItem(STORAGE_KEYS.ADMIN_INFO);
       
-      console.log('✅ Storage verification:', {
+      console.log('✅ [AUTH] Storage verification:', {
         accessTokenStored: !!storedAccessToken,
         refreshTokenStored: !!storedRefreshToken,
         adminInfoStored: !!storedAdminInfo,
         accessTokenLength: storedAccessToken?.length || 0,
-        refreshTokenLength: storedRefreshToken?.length || 0
+        refreshTokenLength: storedRefreshToken?.length || 0,
+        accessTokenMatch: storedAccessToken?.substring(0, 50) === tokensData.access_token.substring(0, 50)
       });
 
       // Set state WITHOUT validating session immediately
@@ -2020,26 +2059,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthenticated(true);
 
       startTokenRefresh();
-      console.log('✅ Login successful');
+      console.log('✅ [AUTH] Login successful');
       
     } catch (error) {
-      console.error('❌ Login error:', error);
+      console.error('❌ [AUTH] Login error:', error);
       throw error;
     }
   }, [storePhoneNumber, startTokenRefresh]);
 
   const logout = useCallback(async () => {
-    console.log('🚪 Logging out...');
+    console.log('🚪 [AUTH] Logging out...');
     try {
       const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
       if (refreshToken) {
-        console.log('📡 Calling logout API...');
+        console.log('📡 [AUTH] Calling logout API...');
         await api.logout(refreshToken);
       }
     } catch (error) {
-      console.error('❌ Logout API error:', error);
+      console.error('❌ [AUTH] Logout API error:', error);
     } finally {
-      console.log('🧹 Clearing session data...');
+      console.log('🧹 [AUTH] Clearing session data...');
       await clearSessionData();
       queryClient.clear();
       
@@ -2050,16 +2089,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoginFlow(null);
       
       // Keep phoneNumber and adminId for next login
-      console.log('✅ Logout complete - Phone number preserved');
+      console.log('✅ [AUTH] Logout complete - Phone number preserved');
     }
   }, [queryClient]);
 
   const refreshAuth = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('🔄 Refreshing authentication...');
+      console.log('🔄 [AUTH] Refreshing authentication...');
       const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
       if (!refreshToken) {
-        console.log('❌ No refresh token found');
+        console.log('❌ [AUTH] No refresh token found');
         return false;
       }
 
@@ -2068,19 +2107,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Validate new tokens
       if (!newTokens?.access_token || !newTokens?.refresh_token) {
-        console.error('❌ Invalid tokens received from refresh');
+        console.error('❌ [AUTH] Invalid tokens received from refresh');
         return false;
       }
       
-      console.log('📝 Storing refreshed tokens...');
+      console.log('📝 [AUTH] Storing refreshed tokens...');
       await setItem(STORAGE_KEYS.ACCESS_TOKEN, newTokens.access_token);
       await setItem(STORAGE_KEYS.REFRESH_TOKEN, newTokens.refresh_token);
       
       setTokens(newTokens);
-      console.log('✅ Auth refresh successful');
+      console.log('✅ [AUTH] Auth refresh successful');
       return true;
     } catch (error) {
-      console.error('❌ Auth refresh failed:', error);
+      console.error('❌ [AUTH] Auth refresh failed:', error);
       return false;
     }
   }, []);
@@ -2096,15 +2135,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkExistingSession = useCallback(async () => {
     try {
-      console.log('🔍 Checking existing session...');
+      console.log('🔍 [AUTH] Checking existing session...');
       const formattedPhone = await getFormattedPhoneNumber();
       if (!formattedPhone) {
-        console.log('❌ No phone number to check session');
+        console.log('❌ [AUTH] No phone number to check session');
         return;
       }
 
       const response = await api.loginInitiate(formattedPhone);
-      console.log('📱 Login initiate response:', response.data);
+      console.log('📱 [AUTH] Login initiate response:', response.data);
       
       if (response.data.success) {
         const { user_exists, has_mpin, mpin_locked, device_trusted } = response.data.data;
@@ -2120,7 +2159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (error) {
-      console.error('❌ Session check error:', error);
+      console.error('❌ [AUTH] Session check error:', error);
     }
   }, []);
 
@@ -7935,17 +7974,32 @@ export default ProfileScreen;
 FILE: src/services/api.ts
 ========================================
 
-import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { getItem, setItem, removeItem, STORAGE_KEYS } from './storage';
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+} from 'axios';
 import { Platform } from 'react-native';
+import { getItem, setItem, removeItem, STORAGE_KEYS } from './storage';
 import { getStoredDeviceInfo } from './deviceInfo';
-import { AuthTokens, ApiError } from '@/types';
+import { ApiError } from '@/types';
+
+/* ============================================================
+   API CONFIG
+   ============================================================ */
 
 const API_BASE_URL = 'http://192.168.31.102:8080/api/v1';
 const API_TIMEOUT = 30000;
 
+/* ============================================================
+   API SERVICE (SINGLETON)
+   ============================================================ */
+
 class ApiService {
   private static instance: ApiService;
+  private api: AxiosInstance;
+
   private isRefreshing = false;
   private failedQueue: Array<{
     resolve: (value?: unknown) => void;
@@ -7953,6 +8007,17 @@ class ApiService {
   }> = [];
 
   private constructor() {
+    this.api = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: API_TIMEOUT,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-Platform': Platform.OS,
+        'X-App-Version': '1.0.0',
+      },
+    });
+
     this.setupInterceptors();
   }
 
@@ -7963,74 +8028,57 @@ class ApiService {
     return ApiService.instance;
   }
 
-  private getApi() {
-    return axios.create({
-      baseURL: API_BASE_URL,
-      timeout: API_TIMEOUT,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Platform': Platform.OS,
-        'X-App-Version': '1.0.0',
-      },
-    });
-  }
+  /* ============================================================
+     INTERCEPTORS
+     ============================================================ */
 
   private setupInterceptors() {
-    const api = this.getApi();
-
-    // Request interceptor
-    api.interceptors.request.use(
+    /* ---------------- REQUEST ---------------- */
+    this.api.interceptors.request.use(
       async (config) => {
-        try {
-          const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
-          
-          if (accessToken) {
-            config.headers.Authorization = `Bearer ${accessToken}`;
-          }
+        const token = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
 
-          // Add device info for auth endpoints
-          if (config.url?.includes('/auth') || config.url?.includes('/otp')) {
-            const deviceInfo = await getStoredDeviceInfo();
-            if (config.data && deviceInfo) {
-              config.data.device_id = deviceInfo.deviceId;
-              config.data.device_fingerprint = deviceInfo.deviceFingerprint;
-              config.data.user_agent = deviceInfo.userAgent;
-            }
-          }
-
-          return config;
-        } catch (error) {
-          return Promise.reject(error);
+        if (token) {
+          (config.headers as any).Authorization = `Bearer ${token}`;
         }
+
+        // Attach device info to auth / otp requests
+        if (config.url?.includes('/auth') || config.url?.includes('/otp')) {
+          const device = await getStoredDeviceInfo();
+
+          if (config.method !== 'get' && config.data) {
+            config.data.device_id = device.deviceId;
+            config.data.device_fingerprint = device.deviceFingerprint;
+            config.data.user_agent = device.userAgent;
+          }
+        }
+
+        return config;
       },
-      (error) => Promise.reject(error)
+      (error) => Promise.reject(error),
     );
 
-    // Response interceptor
-    api.interceptors.response.use(
-      (response) => response,
+    /* ---------------- RESPONSE ---------------- */
+    this.api.interceptors.response.use(
+      (response: AxiosResponse) => response,
       async (error: AxiosError<ApiError>) => {
-        const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+        const originalRequest = error.config as AxiosRequestConfig & {
+          _retry?: boolean;
+        };
 
-        // Handle 429 Rate Limit
+        /* ---------- RATE LIMIT ---------- */
         if (error.response?.status === 429) {
           const retryAfter = error.response.data?.retry_after || 5;
-          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-          return this.getApi()(originalRequest);
+          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+          return this.api(originalRequest);
         }
 
-        // Handle 401 Unauthorized
+        /* ---------- UNAUTHORIZED ---------- */
         if (error.response?.status === 401 && !originalRequest._retry) {
-          if (error.response.data?.error === 'MPIN rate limit exceeded') {
-            throw error;
-          }
-
           if (this.isRefreshing) {
             return new Promise((resolve, reject) => {
               this.failedQueue.push({ resolve, reject });
-            }).then(() => this.getApi()(originalRequest))
-              .catch(err => Promise.reject(err));
+            }).then(() => this.api(originalRequest));
           }
 
           originalRequest._retry = true;
@@ -8038,178 +8086,504 @@ class ApiService {
 
           try {
             const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
-            
-            if (!refreshToken) {
-              throw new Error('No refresh token available');
-            }
+            if (!refreshToken) throw new Error('No refresh token');
 
             const response = await this.refreshToken(refreshToken);
             const newAccessToken = response.data.access_token;
-            
+
             await setItem(STORAGE_KEYS.ACCESS_TOKEN, newAccessToken);
             await setItem(STORAGE_KEYS.REFRESH_TOKEN, response.data.refresh_token);
 
-            // Retry failed requests
             this.processQueue(null, newAccessToken);
 
-            // Retry original request
-            originalRequest.headers = {
-              ...originalRequest.headers,
-              Authorization: `Bearer ${newAccessToken}`,
-            };
-            
-            return this.getApi()(originalRequest);
+            if (!originalRequest.headers) {
+              originalRequest.headers = {};
+            }
+
+            (originalRequest.headers as any).Authorization =
+              `Bearer ${newAccessToken}`;
+
+            return this.api(originalRequest);
           } catch (refreshError) {
             this.processQueue(refreshError, null);
-            
-            // Clear all auth data
+
             await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
             await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
             await removeItem(STORAGE_KEYS.ADMIN_INFO);
-            
-            throw refreshError;
+
+            return Promise.reject(refreshError);
           } finally {
             this.isRefreshing = false;
           }
         }
 
         return Promise.reject(error);
-      }
+      },
     );
-
-    return api;
   }
 
   private processQueue(error: unknown, token: string | null) {
-    this.failedQueue.forEach(promise => {
-      if (error) {
-        promise.reject(error);
-      } else {
-        promise.resolve(token);
-      }
-    });
+    this.failedQueue.forEach((p) =>
+      error ? p.reject(error) : p.resolve(token),
+    );
     this.failedQueue = [];
   }
 
-  // Auth APIs
+  /* ============================================================
+     AUTH APIs
+     ============================================================ */
+
   async loginInitiate(phoneNumber: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/login/initiate', {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/login/initiate', {
       phone_number: phoneNumber,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
     });
   }
 
   async sendOTP(phoneNumber: string, purpose: 'admin_login') {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/otp/send', {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/otp/send', {
       phone_number: phoneNumber,
       purpose,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
     });
   }
 
   async verifyOTP(phoneNumber: string, otp: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/login/verify-otp', {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/login/verify-otp', {
       phone_number: phoneNumber,
       otp,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
-    });
-  }
-
-  async setupMPIN(adminId: string, mpin: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/mpin/setup', {
-      admin_id: adminId,
-      mpin,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
     });
   }
 
   async verifyMPIN(phoneNumber: string, mpin: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/login/verify-mpin', {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/login/verify-mpin', {
       phone_number: phoneNumber,
       mpin,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
     });
   }
 
-  async changeMPIN(adminId: string, currentMpin: string, newMpin: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/mpin/change', {
+  async setupMPIN(adminId: string, mpin: string) {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/mpin/setup', {
       admin_id: adminId,
-      current_mpin: currentMpin,
-      new_mpin: newMpin,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
+      mpin,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
     });
   }
 
-  async forgotMPIN(phoneNumber: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/mpin/forgot', {
-      phone_number: phoneNumber,
-      device_id: deviceInfo.deviceId,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
-    });
-  }
-
-  // Add this method to the ApiService class in src/services/api.ts
-
-async validateSession() {
-  const deviceInfo = await getStoredDeviceInfo();
-  return this.getApi().get('/auth/validate', {
-    headers: {
-      'X-Device-ID': deviceInfo.deviceId,
-      'X-Company-ID': '', 
-    },
-  });
-}
-
-  async verifyForgotMPIN(phoneNumber: string, otpCode: string, newMpin: string) {
-    const deviceInfo = await getStoredDeviceInfo();
-    return this.getApi().post('/admin-auth/mpin/forgot/verify', {
-      phone_number: phoneNumber,
-      device_id: deviceInfo.deviceId,
-      new_mpin: newMpin,
-      otp_code: otpCode,
-      device_fingerprint: deviceInfo.deviceFingerprint,
-      user_agent: deviceInfo.userAgent,
+  async validateSession() {
+    const d = await getStoredDeviceInfo();
+    return this.api.get('/auth/validate', {
+      headers: { 'X-Device-ID': d.deviceId },
     });
   }
 
   async refreshToken(refreshToken: string) {
-    return this.getApi().post('/admin-auth/refresh', {
+    return this.api.post('/admin-auth/refresh', {
       refresh_token: refreshToken,
     });
   }
 
   async logout(refreshToken: string) {
-    return this.getApi().post('/admin-auth/logout', {
+    return this.api.post('/admin-auth/logout', {
       refresh_token: refreshToken,
     });
   }
 
-  // Admin Profile API
+  /* ============================================================
+     ADMIN APIs
+     ============================================================ */
+
   async getAdminProfile() {
-    return this.getApi().get('/admin/profile');
+    return this.api.get('/admin/profile');
+  }
+
+  async changeMPIN(adminId: string, current: string, next: string) {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/mpin/change', {
+      admin_id: adminId,
+      current_mpin: current,
+      new_mpin: next,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
+    });
+  }
+
+  async forgotMPIN(phoneNumber: string) {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/mpin/forgot', {
+      phone_number: phoneNumber,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
+    });
+  }
+
+  async verifyForgotMPIN(phoneNumber: string, otp: string, newMpin: string) {
+    const d = await getStoredDeviceInfo();
+    return this.api.post('/admin-auth/mpin/forgot/verify', {
+      phone_number: phoneNumber,
+      otp_code: otp,
+      new_mpin: newMpin,
+      device_id: d.deviceId,
+      device_fingerprint: d.deviceFingerprint,
+      user_agent: d.userAgent,
+    });
   }
 }
 
+/* ============================================================
+   EXPORT
+   ============================================================ */
+
 export const api = ApiService.getInstance();
+
+// import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+// import { getItem, setItem, removeItem, STORAGE_KEYS } from './storage';
+// import { Platform } from 'react-native';
+// import { getStoredDeviceInfo } from './deviceInfo';
+// import { AuthTokens, ApiError } from '@/types';
+
+// const API_BASE_URL = 'http://192.168.31.102:8080/api/v1';
+// const API_TIMEOUT = 30000;
+
+// class ApiService {
+//   private static instance: ApiService;
+//   private isRefreshing = false;
+//   private failedQueue: Array<{
+//     resolve: (value?: unknown) => void;
+//     reject: (reason?: unknown) => void;
+//   }> = [];
+
+//   private constructor() {
+//     this.setupInterceptors();
+//   }
+
+//   static getInstance(): ApiService {
+//     if (!ApiService.instance) {
+//       ApiService.instance = new ApiService();
+//     }
+//     return ApiService.instance;
+//   }
+
+//   private getApi() {
+//     return axios.create({
+//       baseURL: API_BASE_URL,
+//       timeout: API_TIMEOUT,
+//       headers: {
+//         'Content-Type': 'application/json',
+//         'Accept': 'application/json',
+//         'X-Platform': Platform.OS,
+//         'X-App-Version': '1.0.0',
+//       },
+//     });
+//   }
+
+//   private setupInterceptors() {
+//     const api = this.getApi();
+
+//     // Request interceptor - ADDED DEBUG LOGGING
+//     api.interceptors.request.use(
+//       async (config) => {
+//         try {
+//           console.log('🔐 [INTERCEPTOR] Request URL:', config.url);
+//           console.log('🔐 [INTERCEPTOR] Request Method:', config.method?.toUpperCase());
+          
+//           const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
+//           console.log('🔐 [INTERCEPTOR] Access Token Available:', !!accessToken);
+//           console.log('🔐 [INTERCEPTOR] Access Token Preview:', accessToken ? `${accessToken.substring(0, 30)}...` : 'NONE');
+          
+//           if (accessToken) {
+//             const authHeader = `Bearer ${accessToken}`;
+//             config.headers.Authorization = authHeader;
+//             console.log('✅ [INTERCEPTOR] Set Authorization Header for:', config.url);
+//             console.log('✅ [INTERCEPTOR] Auth Header Preview:', authHeader.substring(0, 50) + '...');
+//           } else {
+//             console.log('⚠️ [INTERCEPTOR] NO ACCESS TOKEN FOUND for:', config.url);
+//           }
+
+//           // Add device info for auth endpoints
+//           if (config.url?.includes('/auth') || config.url?.includes('/otp')) {
+//             const deviceInfo = await getStoredDeviceInfo();
+//             if (config.data && deviceInfo) {
+//               config.data.device_id = deviceInfo.deviceId;
+//               config.data.device_fingerprint = deviceInfo.deviceFingerprint;
+//               config.data.user_agent = deviceInfo.userAgent;
+//             }
+//           }
+
+//           // Log final headers
+//           console.log('📤 [INTERCEPTOR] Final Headers for', config.url, ':', {
+//             Authorization: config.headers.Authorization ? '✅ Present' : '❌ Missing',
+//             'X-Device-ID': config.headers['X-Device-ID'] || 'Not set',
+//             'Content-Type': config.headers['Content-Type'],
+//           });
+
+//           return config;
+//         } catch (error) {
+//           console.error('❌ [INTERCEPTOR] Error:', error);
+//           return Promise.reject(error);
+//         }
+//       },
+//       (error) => {
+//         console.error('❌ [INTERCEPTOR] Request error:', error);
+//         return Promise.reject(error);
+//       }
+//     );
+
+//     // Response interceptor - ADDED DEBUG LOGGING
+//     api.interceptors.response.use(
+//       (response) => {
+//         console.log('✅ [INTERCEPTOR] Response:', {
+//           url: response.config.url,
+//           status: response.status,
+//           data: response.data
+//         });
+//         return response;
+//       },
+//       async (error: AxiosError<ApiError>) => {
+//         console.error('❌ [INTERCEPTOR] Response error:', {
+//           url: error.config?.url,
+//           status: error.response?.status,
+//           data: error.response?.data,
+//           headers: error.config?.headers
+//         });
+
+//         const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+
+//         // Handle 429 Rate Limit
+//         if (error.response?.status === 429) {
+//           const retryAfter = error.response.data?.retry_after || 5;
+//           console.log(`⏰ [INTERCEPTOR] Rate limited, retrying after ${retryAfter}s`);
+//           await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+//           return this.getApi()(originalRequest);
+//         }
+
+//         // Handle 401 Unauthorized
+//         if (error.response?.status === 401 && !originalRequest._retry) {
+//           if (error.response.data?.error === 'MPIN rate limit exceeded') {
+//             throw error;
+//           }
+
+//           if (this.isRefreshing) {
+//             console.log('🔄 [INTERCEPTOR] Already refreshing token, queuing request');
+//             return new Promise((resolve, reject) => {
+//               this.failedQueue.push({ resolve, reject });
+//             }).then(() => this.getApi()(originalRequest))
+//               .catch(err => Promise.reject(err));
+//           }
+
+//           originalRequest._retry = true;
+//           this.isRefreshing = true;
+//           console.log('🔄 [INTERCEPTOR] Starting token refresh...');
+
+//           try {
+//             const refreshToken = await getItem(STORAGE_KEYS.REFRESH_TOKEN);
+            
+//             if (!refreshToken) {
+//               console.error('❌ [INTERCEPTOR] No refresh token available');
+//               throw new Error('No refresh token available');
+//             }
+
+//             const response = await this.refreshToken(refreshToken);
+//             const newAccessToken = response.data.access_token;
+            
+//             console.log('✅ [INTERCEPTOR] Token refresh successful');
+            
+//             await setItem(STORAGE_KEYS.ACCESS_TOKEN, newAccessToken);
+//             await setItem(STORAGE_KEYS.REFRESH_TOKEN, response.data.refresh_token);
+
+//             // Retry failed requests
+//             this.processQueue(null, newAccessToken);
+
+//             // Retry original request
+//             originalRequest.headers = {
+//               ...originalRequest.headers,
+//               Authorization: `Bearer ${newAccessToken}`,
+//             };
+            
+//             return this.getApi()(originalRequest);
+//           } catch (refreshError) {
+//             console.error('❌ [INTERCEPTOR] Token refresh failed:', refreshError);
+//             this.processQueue(refreshError, null);
+            
+//             // Clear all auth data
+//             await removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+//             await removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+//             await removeItem(STORAGE_KEYS.ADMIN_INFO);
+            
+//             throw refreshError;
+//           } finally {
+//             this.isRefreshing = false;
+//           }
+//         }
+
+//         return Promise.reject(error);
+//       }
+//     );
+
+//     return api;
+//   }
+
+//   private processQueue(error: unknown, token: string | null) {
+//     this.failedQueue.forEach(promise => {
+//       if (error) {
+//         promise.reject(error);
+//       } else {
+//         promise.resolve(token);
+//       }
+//     });
+//     this.failedQueue = [];
+//   }
+
+//   // Auth APIs
+//   async loginInitiate(phoneNumber: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/login/initiate', {
+//       phone_number: phoneNumber,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//     });
+//   }
+
+//   async sendOTP(phoneNumber: string, purpose: 'admin_login') {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/otp/send', {
+//       phone_number: phoneNumber,
+//       purpose,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async verifyOTP(phoneNumber: string, otp: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/login/verify-otp', {
+//       phone_number: phoneNumber,
+//       otp,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async setupMPIN(adminId: string, mpin: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/mpin/setup', {
+//       admin_id: adminId,
+//       mpin,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async verifyMPIN(phoneNumber: string, mpin: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/login/verify-mpin', {
+//       phone_number: phoneNumber,
+//       mpin,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async changeMPIN(adminId: string, currentMpin: string, newMpin: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/mpin/change', {
+//       admin_id: adminId,
+//       current_mpin: currentMpin,
+//       new_mpin: newMpin,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async forgotMPIN(phoneNumber: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/mpin/forgot', {
+//       phone_number: phoneNumber,
+//       device_id: deviceInfo.deviceId,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async validateSession() {
+//     console.log('🔍 [API] Starting session validation...');
+    
+//     const deviceInfo = await getStoredDeviceInfo();
+//     console.log('📱 [API] Device ID for validation:', deviceInfo.deviceId);
+    
+//     // Check token before making request
+//     const accessToken = await getItem(STORAGE_KEYS.ACCESS_TOKEN);
+//     console.log('🔐 [API] Token check before request:', {
+//       hasToken: !!accessToken,
+//       tokenLength: accessToken?.length || 0,
+//       tokenPreview: accessToken ? `${accessToken.substring(0, 30)}...` : 'NONE'
+//     });
+    
+//     return this.getApi().get('/auth/validate', {
+//       headers: {
+//         'X-Device-ID': deviceInfo.deviceId,
+//         // Authorization header should be added by interceptor
+//       },
+//     });
+//   }
+
+//   async verifyForgotMPIN(phoneNumber: string, otpCode: string, newMpin: string) {
+//     const deviceInfo = await getStoredDeviceInfo();
+//     return this.getApi().post('/admin-auth/mpin/forgot/verify', {
+//       phone_number: phoneNumber,
+//       device_id: deviceInfo.deviceId,
+//       new_mpin: newMpin,
+//       otp_code: otpCode,
+//       device_fingerprint: deviceInfo.deviceFingerprint,
+//       user_agent: deviceInfo.userAgent,
+//     });
+//   }
+
+//   async refreshToken(refreshToken: string) {
+//     console.log('🔄 [API] Refreshing token...');
+//     return this.getApi().post('/admin-auth/refresh', {
+//       refresh_token: refreshToken,
+//     });
+//   }
+
+//   async logout(refreshToken: string) {
+//     console.log('🚪 [API] Logging out...');
+//     return this.getApi().post('/admin-auth/logout', {
+//       refresh_token: refreshToken,
+//     });
+//   }
+
+//   // Admin Profile API
+//   async getAdminProfile() {
+//     console.log('👤 [API] Getting admin profile...');
+//     return this.getApi().get('/admin/profile');
+//   }
+// }
+
+// export const api = ApiService.getInstance();
 ========================================
 FILE: src/services/deviceInfo.ts
 ========================================
