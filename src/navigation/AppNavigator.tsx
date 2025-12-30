@@ -17,6 +17,12 @@ import MainDashboardScreen from '@/screens/dashboard/MainDashboardScreen';
 import ProfileScreen from '@/screens/profile/ProfileScreen';
 import ChangeMPINScreen from '@/screens/profile/ChangeMPINScreen';
 import DepartmentScreen from '@/screens/dashboard/DepartmentScreen';
+
+// Management Screens
+import EmployeeManagementScreen from '@/screens/management/EmployeeManagementScreen';
+import ManagerManagementScreen from '@/screens/management/ManagerManagementScreen';
+import CompanyManagementScreen from '@/screens/management/CompanyManagementScreen';
+
 import CustomDrawerContent from '@/components/CustomDrawerContent';
 
 const Stack = createNativeStackNavigator();
@@ -37,6 +43,9 @@ const SCREENS = {
   PROFILE: 'Profile',
   CHANGE_MPIN: 'ChangeMPIN',
   DEPARTMENT: 'Department',
+  EMPLOYEE_MANAGEMENT: 'EmployeeManagement',
+  MANAGER_MANAGEMENT: 'ManagerManagement',
+  COMPANY_MANAGEMENT: 'CompanyManagement',
   MAIN_DRAWER: 'MainDrawer',
 };
 
@@ -82,6 +91,40 @@ const MainDrawer = () => {
           drawerLabel: 'Dashboard',
           drawerIcon: ({ color, size }) => (
             <Icon name="view-dashboard" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* Add Management Screens */}
+      <Drawer.Screen
+        name={SCREENS.EMPLOYEE_MANAGEMENT}
+        component={EmployeeManagementScreen}
+        options={{
+          drawerLabel: 'Employee Management',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="account-multiple" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Drawer.Screen
+        name={SCREENS.MANAGER_MANAGEMENT}
+        component={ManagerManagementScreen}
+        options={{
+          drawerLabel: 'Manager Management',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="account-tie" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Drawer.Screen
+        name={SCREENS.COMPANY_MANAGEMENT}
+        component={CompanyManagementScreen}
+        options={{
+          drawerLabel: 'Company Management',
+          drawerIcon: ({ color, size }) => (
+            <Icon name="domain" size={size} color={color} />
           ),
         }}
       />

@@ -9,7 +9,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 
@@ -21,109 +21,71 @@ import StatsOverview from '@/components/StatsOverview';
 
 const { width } = Dimensions.get('window');
 
-// Define navigation types
+/* ============================================================
+   TYPES
+   ============================================================ */
+
 type MainDashboardScreenNavigationProp = {
   navigate: (screen: string, params?: any) => void;
   openDrawer: () => void;
   reset: (state: any) => void;
 };
 
+/* ============================================================
+   SCREEN
+   ============================================================ */
+
 const MainDashboardScreen: React.FC = () => {
   const navigation = useNavigation<MainDashboardScreenNavigationProp>();
-  const { adminInfo, logout, validateSession, clearTokensAndNavigate } = useAuth();
+  const { adminInfo, logout, validateSession } = useAuth();
   const { showToast } = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [isBootstrapped, setIsBootstrapped] = useState(false);
+
   const [dailyQuota, setDailyQuota] = useState({
     limit: 0,
     remaining: 0,
     used: 0,
   });
-  const [isSessionValidated, setIsSessionValidated] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
-  // Validate session on component mount
+  /* ============================================================
+     ONE-TIME SESSION CHECK (SOFT)
+     ============================================================ */
+
   useEffect(() => {
-    const validateSessionOnMount = async () => {
+    let mounted = true;
+
+    const bootstrap = async () => {
       try {
-        console.log('🔍 [DASHBOARD] Validating session on mount...');
-        setIsCheckingSession(true);
-        const isValid = await validateSession();
-        
-        if (!isValid) {
-          console.log('❌ [DASHBOARD] Session invalid on mount');
-          showToast('error', 'Session expired. Please login with MPIN.');
-          
-          // Clear tokens and navigate to VerifyMPIN
-          await clearTokensAndNavigate();
-          
-          // Navigate to VerifyMPIN
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'VerifyMPIN' }],
-          });
-        } else {
-          console.log('✅ [DASHBOARD] Session validated on mount');
-          setIsSessionValidated(true);
-        }
-      } catch (error) {
-        console.error('❌ [DASHBOARD] Session validation error on mount:', error);
-        showToast('error', 'Session validation failed. Please login again.');
-        await clearTokensAndNavigate();
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'VerifyMPIN' }],
-        });
+        console.log('🔍 [DASHBOARD] Soft session check on mount');
+        await validateSession(); // 🔑 informational only
+      } catch {
+        // ❌ DO NOTHING HERE
+        // Axios interceptor will handle real failures
       } finally {
-        setIsCheckingSession(false);
+        if (mounted) setIsBootstrapped(true);
       }
     };
 
-    validateSessionOnMount();
-  }, [validateSession, clearTokensAndNavigate, showToast, navigation]);
+    bootstrap();
+    return () => {
+      mounted = false;
+    };
+  }, [validateSession]);
 
-  // Validate session when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      const validateOnFocus = async () => {
-        if (isSessionValidated) {
-          try {
-            console.log('🔍 [DASHBOARD] Validating session on focus...');
-            const isValid = await validateSession();
-            
-            if (!isValid) {
-              console.log('❌ [DASHBOARD] Session invalid on focus');
-              showToast('error', 'Session expired. Please login with MPIN.');
-              
-              // Use the new function instead of logout
-              await clearTokensAndNavigate();
-              
-              // Navigate to VerifyMPIN
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'VerifyMPIN' }],
-              });
-            }
-          } catch (error) {
-            console.error('❌ [DASHBOARD] Session validation error on focus:', error);
-            showToast('error', 'Session validation failed. Please login again.');
-            await clearTokensAndNavigate();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'VerifyMPIN' }],
-            });
-          }
-        }
-      };
+  /* ============================================================
+     PROFILE QUERY
+     ============================================================ */
 
-      validateOnFocus();
-    }, [validateSession, clearTokensAndNavigate, showToast, isSessionValidated, navigation])
-  );
-
-  const { data: profileData, refetch, isLoading: profileLoading } = useQuery({
+  const {
+    data: profileData,
+    refetch,
+    isLoading: profileLoading,
+  } = useQuery({
     queryKey: ['adminProfile'],
     queryFn: () => api.getAdminProfile(),
-    enabled: !!adminInfo && isSessionValidated && !isCheckingSession,
+    enabled: !!adminInfo && isBootstrapped,
   });
 
   useEffect(() => {
@@ -132,10 +94,17 @@ const MainDashboardScreen: React.FC = () => {
     }
   }, [profileData]);
 
+  /* ============================================================
+     HANDLERS
+     ============================================================ */
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleDepartmentPress = (department: string) => {
@@ -154,8 +123,6 @@ const MainDashboardScreen: React.FC = () => {
           onPress: async () => {
             await logout();
             showToast('success', 'Logged out successfully');
-            
-            // Navigate to VerifyMPIN after logout
             navigation.reset({
               index: 0,
               routes: [{ name: 'VerifyMPIN' }],
@@ -166,47 +133,56 @@ const MainDashboardScreen: React.FC = () => {
     );
   };
 
-  // Show loading while validating session
-  if (isCheckingSession || !isSessionValidated) {
+  /* ============================================================
+     LOADING STATE
+     ============================================================ */
+
+  if (!isBootstrapped) {
     return (
       <View style={styles.loadingContainer}>
         <Icon name="shield-check" size={60} color="#C084FC" />
-        <Text style={styles.loadingText}>Validating session...</Text>
+        <Text style={styles.loadingText}>Preparing dashboard...</Text>
       </View>
     );
   }
 
-  const departments: string[] = adminInfo?.departments || [];
+  /* ============================================================
+     DEPARTMENTS
+     ============================================================ */
+
+  const departments: string[] = adminInfo?.departments ?? [];
 
   const categorizedDepartments: Record<string, string[]> = {
-    'Core Operations': departments.filter(dept =>
-      ['HR', 'Finance', 'Accounting', 'Procurement', 'Inventory'].includes(dept),
+    'Core Operations': departments.filter((d) =>
+      ['HR', 'Finance', 'Accounting', 'Procurement', 'Inventory'].includes(d),
     ),
-    'Business Units': departments.filter(dept =>
-      ['Sales', 'Marketing', 'Customer Support', 'Operations'].includes(dept),
+    'Business Units': departments.filter((d) =>
+      ['Sales', 'Marketing', 'Customer Support', 'Operations'].includes(d),
     ),
-    'Technical & Quality': departments.filter(dept =>
-      ['IT', 'Production', 'Quality Control', 'Quality Assurance', 'R&D'].includes(dept),
+    'Technical & Quality': departments.filter((d) =>
+      ['IT', 'Production', 'Quality Control', 'Quality Assurance', 'R&D'].includes(d),
     ),
-    Administration: departments.filter(dept =>
+    Administration: departments.filter((d) =>
       [
         'Administration',
         'Employee Management',
         'Manager Management',
         'Company Management',
         'Super Admin Management',
-      ].includes(dept),
+      ].includes(d),
     ),
   };
 
+  /* ============================================================
+     RENDER
+     ============================================================ */
+
   return (
     <View style={styles.container}>
-      {/* ================= Header ================= */}
+      {/* ================= HEADER ================= */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => {
-            navigation.openDrawer();
-          }}
+          onPress={() => navigation.openDrawer()}
           style={styles.menuButton}
         >
           <Icon name="menu" size={24} color="#333" />
@@ -227,7 +203,7 @@ const MainDashboardScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* ================= Content ================= */}
+      {/* ================= CONTENT ================= */}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -242,49 +218,36 @@ const MainDashboardScreen: React.FC = () => {
       >
         <StatsOverview
           dailyQuota={dailyQuota}
-          permissions={adminInfo?.permissions?.length || 0}
+          permissions={adminInfo?.permissions?.length ?? 0}
           departments={departments.length}
           isLoading={profileLoading}
         />
 
-        {/* ================= Quick Actions ================= */}
+        {/* ================= QUICK ACTIONS ================= */}
         <View style={styles.actionsContainer}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('ChangeMPIN')}
-            >
-              <View style={styles.iconContainer}>
-                <Icon name="key-change" size={24} color="#C084FC" />
-              </View>
-              <Text style={styles.actionLabel}>Change MPIN</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.actionButton}>
-              <View style={styles.iconContainer}>
-                <Icon name="file-document" size={24} color="#C084FC" />
-              </View>
-              <Text style={styles.actionLabel}>Reports</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.actionButton}>
-              <View style={styles.iconContainer}>
-                <Icon name="calendar-clock" size={24} color="#C084FC" />
-              </View>
-              <Text style={styles.actionLabel}>Attendance</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.actionButton}>
-              <View style={styles.iconContainer}>
-                <Icon name="chart-bar" size={24} color="#C084FC" />
-              </View>
-              <Text style={styles.actionLabel}>Analytics</Text>
-            </TouchableOpacity>
+            {[
+              { icon: 'key-change', label: 'Change MPIN', screen: 'ChangeMPIN' },
+              { icon: 'file-document', label: 'Reports' },
+              { icon: 'calendar-clock', label: 'Attendance' },
+              { icon: 'chart-bar', label: 'Analytics' },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.actionButton}
+                onPress={() => item.screen && navigation.navigate(item.screen)}
+              >
+                <View style={styles.iconContainer}>
+                  <Icon name={item.icon as any} size={24} color="#C084FC" />
+                </View>
+                <Text style={styles.actionLabel}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        {/* ================= Departments ================= */}
+        {/* ================= DEPARTMENTS ================= */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Departments</Text>
@@ -293,10 +256,8 @@ const MainDashboardScreen: React.FC = () => {
             </Text>
           </View>
 
-          {Object.entries(categorizedDepartments).map(([category, depts]) => {
-            if (depts.length === 0) return null;
-
-            return (
+          {Object.entries(categorizedDepartments).map(([category, depts]) =>
+            depts.length ? (
               <View key={category} style={styles.categorySection}>
                 <Text style={styles.categoryTitle}>{category}</Text>
                 <View style={styles.departmentsGrid}>
@@ -310,11 +271,11 @@ const MainDashboardScreen: React.FC = () => {
                   ))}
                 </View>
               </View>
-            );
-          })}
+            ) : null,
+          )}
         </View>
 
-        {/* ================= Daily Quota ================= */}
+        {/* ================= DAILY QUOTA ================= */}
         {dailyQuota.limit > 0 && (
           <View style={styles.quotaContainer}>
             <View style={styles.quotaHeader}>
@@ -342,7 +303,7 @@ const MainDashboardScreen: React.FC = () => {
           </View>
         )}
 
-        {/* ================= Footer ================= */}
+        {/* ================= FOOTER ================= */}
         <View style={styles.footer}>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <Icon name="logout" size={20} color="#DC2626" />
@@ -357,6 +318,10 @@ const MainDashboardScreen: React.FC = () => {
 };
 
 export default MainDashboardScreen;
+
+/* ============================================================
+   STYLES
+   ============================================================ */
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
@@ -381,26 +346,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  menuButton: {
-    padding: 8,
-    marginRight: 12,
-  },
+  menuButton: { padding: 8, marginRight: 12 },
   headerTitleContainer: { flex: 1 },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-  },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#1E293B' },
+  headerSubtitle: { fontSize: 13, color: '#64748B', marginTop: 2 },
   profileButton: { padding: 8 },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   actionsContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -414,11 +365,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  actionButton: {
-    width: '48%',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
+  actionButton: { width: '48%', alignItems: 'center', marginBottom: 16 },
   iconContainer: {
     width: 56,
     height: 56,
@@ -430,35 +377,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E9D5FF',
   },
-  actionLabel: {
-    fontSize: 13,
-    color: '#475569',
-    textAlign: 'center',
-  },
+  actionLabel: { fontSize: 13, color: '#475569', textAlign: 'center' },
   section: { marginTop: 24 },
   sectionHeader: { marginBottom: 16 },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    marginTop: 4,
-  },
+  sectionTitle: { fontSize: 20, fontWeight: '600', color: '#1E293B' },
+  sectionSubtitle: { fontSize: 14, color: '#64748B', marginTop: 4 },
   categorySection: { marginBottom: 24 },
-  categoryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 12,
-  },
-  departmentsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -6,
-  },
+  categoryTitle: { fontSize: 16, fontWeight: '600', color: '#475569', marginBottom: 12 },
+  departmentsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 },
   quotaContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
@@ -467,17 +393,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  quotaHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  quotaTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginLeft: 8,
-  },
+  quotaHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  quotaTitle: { fontSize: 16, fontWeight: '600', color: '#1E293B', marginLeft: 8 },
   quotaBar: {
     height: 8,
     backgroundColor: '#E2E8F0',
@@ -485,23 +402,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 8,
   },
-  quotaFill: {
-    height: '100%',
-    backgroundColor: '#C084FC',
-    borderRadius: 4,
-  },
-  quotaInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  quotaText: {
-    fontSize: 13,
-    color: '#64748B',
-  },
-  footer: {
-    marginTop: 32,
-    alignItems: 'center',
-  },
+  quotaFill: { height: '100%', backgroundColor: '#C084FC', borderRadius: 4 },
+  quotaInfo: { flexDirection: 'row', justifyContent: 'space-between' },
+  quotaText: { fontSize: 13, color: '#64748B' },
+  footer: { marginTop: 32, alignItems: 'center' },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,14 +415,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     marginBottom: 16,
   },
-  logoutText: {
-    color: '#DC2626',
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  versionText: {
-    fontSize: 12,
-    color: '#94A3B8',
-  },
+  logoutText: { color: '#DC2626', fontSize: 14, fontWeight: '500', marginLeft: 8 },
+  versionText: { fontSize: 12, color: '#94A3B8' },
 });

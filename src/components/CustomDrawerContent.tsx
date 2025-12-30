@@ -154,6 +154,31 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
     return icons[department] || 'folder';
   };
 
+  // Function to handle department press with navigation logic
+  const handleDepartmentPress = (department: string) => {
+    // Close drawer first
+    if (navigation && navigation.closeDrawer) {
+      navigation.closeDrawer();
+    }
+    
+    // Navigate based on department
+    setTimeout(() => {
+      switch (department) {
+        case 'Employee Management':
+          navigation.navigate('EmployeeManagement');
+          break;
+        case 'Manager Management':
+          navigation.navigate('ManagerManagement');
+          break;
+        case 'Company Management':
+          navigation.navigate('CompanyManagement');
+          break;
+        default:
+          navigation.navigate('Department', { department });
+      }
+    }, 100);
+  };
+
   const departmentColors = [
     '#C084FC',
     '#A855F7',
@@ -249,10 +274,7 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
               <TouchableOpacity
                 key={department}
                 style={styles.departmentItem}
-                onPress={() => {
-                  navigation.navigate('Department', { department });
-                  navigation.closeDrawer();
-                }}
+                onPress={() => handleDepartmentPress(department)}
               >
                 <View
                   style={[
