@@ -44,27 +44,57 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
       'Logout',
       'Are you sure you want to logout?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Cancel', 
+          style: 'cancel',
+          onPress: () => {
+            console.log('Logout cancelled');
+          }
+        },
         {
           text: 'Logout',
           style: 'destructive',
           onPress: async () => {
+            console.log('Logout confirmed');
+            
             // Close drawer first
-            navigation.closeDrawer();
+            if (navigation && navigation.closeDrawer) {
+              navigation.closeDrawer();
+            }
             
-            await logout();
-            showToast('success', 'Logged out successfully');
-            
-            // Navigate to VerifyMPIN after logout - EXACTLY LIKE DASHBOARD
-            // Use the navigation prop from props which should be the drawer's navigation
-            // The drawer's navigation should have access to the root navigator
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'VerifyMPIN' }],
-            });
+            try {
+              await logout();
+              showToast('success', 'Logged out successfully');
+              
+              // Navigate to VerifyMPIN after logout
+              // Using getParent() to access the root navigator
+              const rootNavigation = navigation.getParent ? navigation.getParent() : navigation;
+              
+              if (rootNavigation && rootNavigation.reset) {
+                rootNavigation.reset({
+                  index: 0,
+                  routes: [{ name: 'VerifyMPIN' }],
+                });
+              } else if (navigation && navigation.reset) {
+                // Fallback to current navigation
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'VerifyMPIN' }],
+                });
+              }
+            } catch (error) {
+              console.error('Logout error:', error);
+              showToast('error', 'Failed to logout. Please try again.');
+            }
           },
         },
       ],
+      {
+        // Prevent dismissing on backdrop tap on iOS
+        onDismiss: () => {
+          console.log('Alert dismissed');
+        }
+      }
     );
   };
 
@@ -248,7 +278,11 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
 
       {/* ===== FOOTER ===== */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={handleLogout}
+          activeOpacity={0.7}
+        >
           <Icon name="logout" size={width * 0.055} color="#EF4444" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
@@ -264,10 +298,13 @@ const CustomDrawerContent: React.FC<CustomDrawerContentProps> = ({ props }) => {
   );
 };
 
-/* ================= STYLES (UNCHANGED) ================= */
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#FFFFFF' 
+  },
   header: {
     backgroundColor: '#C084FC',
     paddingTop: Platform.OS === 'ios' ? height * 0.08 : height * 0.06,
@@ -281,8 +318,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: height * 0.025,
   },
-  avatarContainer: { marginRight: width * 0.04 },
-  userInfo: { flex: 1 },
+  avatarContainer: { 
+    marginRight: width * 0.04 
+  },
+  userInfo: { 
+    flex: 1 
+  },
   userName: {
     fontSize: width * 0.048,
     fontWeight: '700',
@@ -310,13 +351,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: width * 0.03,
   },
-  statItem: { flexDirection: 'row', alignItems: 'center' },
+  statItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
   statText: {
     fontSize: width * 0.03,
     color: '#FFFFFF',
     marginLeft: width * 0.015,
   },
-  drawerContent: { paddingTop: height * 0.02 },
+  drawerContent: { 
+    paddingTop: height * 0.02 
+  },
   departmentsSection: {
     paddingHorizontal: width * 0.05,
     marginVertical: height * 0.02,
@@ -371,7 +417,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: width * 0.02,
   },
-  versionContainer: { alignItems: 'center' },
+  versionContainer: { 
+    alignItems: 'center' 
+  },
   versionText: {
     fontSize: width * 0.032,
     color: '#64748B',
