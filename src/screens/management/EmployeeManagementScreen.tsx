@@ -13,6 +13,7 @@ import {
   Dimensions,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -504,7 +505,6 @@ const EmployeeManagementScreen = () => {
   const [roleName, setRoleName] = useState('');
   const [description, setDescription] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingPermissionsFor, setLoadingPermissionsFor] = useState<string[]>([]);
   const [selectedRoleDetails, setSelectedRoleDetails] = useState<RoleDetails | null>(null);
@@ -851,7 +851,7 @@ const EmployeeManagementScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, isTablet && styles.headerTablet]}>
         <View style={isTablet && styles.headerContentTablet}>
@@ -860,38 +860,7 @@ const EmployeeManagementScreen = () => {
             Manage employee roles and permissions • {rolesData?.meta?.count || 0} roles
           </Text>
         </View>
-        
-        <TouchableOpacity
-          style={styles.headerIconButton}
-          onPress={() => setShowSearch(!showSearch)}
-        >
-          <MaterialCommunityIcons 
-            name={showSearch ? "close" : "magnify"} 
-            size={isTablet ? 24 : 20} 
-            color="#64748B" 
-          />
-        </TouchableOpacity>
       </View>
-
-      {/* Search Bar - Conditionally Rendered */}
-      {showSearch && (
-        <View style={[styles.searchContainer, isTablet && styles.searchContainerTablet]}>
-          <MaterialCommunityIcons name="magnify" size={isTablet ? 24 : 20} color="#64748B" />
-          <TextInput
-            style={[styles.searchInput, isTablet && styles.searchInputTablet]}
-            placeholder="Search employee roles..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#94A3B8"
-            autoFocus
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialCommunityIcons name="close-circle" size={20} color="#94A3B8" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      )}
 
       {/* Stats Bar */}
       <View style={[styles.statsContainer, isTablet && styles.statsContainerTablet]}>
@@ -1255,11 +1224,11 @@ const EmployeeManagementScreen = () => {
         roleDetails={selectedRoleDetails}
         isLoading={loadingRoleDetails}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
-// Updated and Added Styles with corrected duplicate property names
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1309,428 +1278,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 4,
   },
-  // Footer Styles
-  footer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 5,
-  },
-  footerTablet: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  footerButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  refreshIconContainer: {
-    backgroundColor: '#FAF5FF',
-    borderWidth: 2,
-    borderColor: '#C084FC',
-  },
-  createIconContainer: {
-    backgroundColor: '#C084FC',
-  },
-  footerButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  // Permission Button in Create Modal
-  permissionsButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  permissionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#C084FC',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 8,
-  },
-  permissionsButtonTablet: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 10,
-  },
-  permissionsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  permissionsButtonTextTablet: {
-    fontSize: 14,
-  },
-  permissionsSummary: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  departmentSummary: {
-    marginBottom: 8,
-  },
-  departmentSummaryTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  permissionsListText: {
-    fontSize: 11,
-    color: '#64748B',
-    lineHeight: 16,
-  },
-  noPermissionsText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontStyle: 'italic',
-  },
-  // Role Details Modal Styles
-  roleDetailsModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  roleDetailsModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: height * 0.9,
-  },
-  roleDetailsModalContentTablet: {
-    maxHeight: height * 0.9,
-    width: isTablet ? '80%' : '100%',
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  roleDetailsModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  roleDetailsTitleContainer: {
-    flex: 1,
-  },
-  roleDetailsModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  roleDetailsModalTitleTablet: {
-    fontSize: 24,
-  },
-  roleDetailsModalSubtitle: {
-    fontSize: 14,
-    color: '#C084FC',
-    marginTop: 2,
-    fontWeight: '600',
-  },
-  roleDetailsModalSubtitleTablet: {
-    fontSize: 16,
-    marginTop: 4,
-  },
-  roleDetailsModalBody: {
-    padding: 20,
-  },
-  roleDetailsModalFooter: {
-    flexDirection: 'row',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  closeDetailsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-    flex: 1,
-  },
-  closeDetailsButtonTablet: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 10,
-  },
-  closeDetailsButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  closeDetailsButtonTextTablet: {
-    fontSize: 16,
-  },
-  detailsLoader: {
-    marginTop: 40,
-    marginBottom: 40,
-  },
-  // Role Details Content Styles
-  roleInfoSection: {
-    marginBottom: 24,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  sectionTitleTablet: {
-    fontSize: 18,
-  },
-  countBadge: {
-    backgroundColor: '#C084FC',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 30,
-    alignItems: 'center',
-  },
-  countBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  roleInfoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  infoItem: {
-    width: '48%',
-    marginBottom: 12,
-  },
-  fullWidthItem: {
-    width: '100%',
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  descriptionText: {
-    fontWeight: '400',
-    lineHeight: 20,
-  },
-  departmentsGrid: {
-    gap: 12,
-  },
-  departmentChip: {
-    flexDirection: 'row',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'flex-start',
-  },
-  departmentIcon: {
-    marginTop: 2,
-    marginRight: 12,
-  },
-  departmentInfo: {
-    flex: 1,
-  },
-  departmentNameDetails: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  departmentModuleDetails: {
-    fontSize: 12,
-    color: '#C084FC',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  departmentDesc: {
-    fontSize: 12,
-    color: '#64748B',
-    lineHeight: 16,
-  },
-  permissionsListContainer: {
-    gap: 12,
-  },
-  permissionRow: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
-  },
-  permissionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  permissionName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    flex: 1,
-    marginRight: 12,
-  },
-  permissionBadge: {
-    backgroundColor: '#EDE9FE',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  permissionBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#7C3AED',
-  },
-  permissionDescription: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 8,
-    lineHeight: 16,
-  },
-  permissionMeta: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  // Permission Selection Modal Styles
-  permissionModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  permissionModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: height * 0.9,
-  },
-  permissionModalContentTablet: {
-    maxHeight: height * 0.9,
-    width: isTablet ? '80%' : '100%',
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  permissionModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  permissionModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  permissionModalTitleTablet: {
-    fontSize: 24,
-  },
-  permissionModalSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  permissionModalSubtitleTablet: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  permissionModalBody: {
-    padding: 20,
-    maxHeight: height * 0.7,
-  },
-  permissionModalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    gap: 12,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  searchContainerTablet: {
-    margin: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    marginRight: 8,
-    fontSize: 14,
-    color: '#1E293B',
-  },
-  searchInputTablet: {
-    marginLeft: 12,
-    marginRight: 12,
-    fontSize: 16,
-  },
   statsContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
+    marginTop: 12,
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 12,
@@ -1739,6 +1290,7 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   statsContainerTablet: {
+    marginTop: 16,
     marginHorizontal: 24,
     marginBottom: 16,
     padding: 16,
@@ -1966,6 +1518,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  footer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  footerTablet: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  footerButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  refreshIconContainer: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 2,
+    borderColor: '#C084FC',
+  },
+  createIconContainer: {
+    backgroundColor: '#C084FC',
+  },
+  footerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -2134,6 +1729,420 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  permissionsButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  permissionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#C084FC',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 8,
+  },
+  permissionsButtonTablet: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 10,
+  },
+  permissionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  permissionsButtonTextTablet: {
+    fontSize: 14,
+  },
+  permissionsSummary: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  departmentSummary: {
+    marginBottom: 8,
+  },
+  departmentSummaryTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  permissionsListText: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  noPermissionsText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    marginTop: 8,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  summaryDetails: {
+    gap: 4,
+  },
+  summaryText: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  cancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingVertical: 14,
+  },
+  cancelButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 16,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  cancelButtonTextTablet: {
+    fontSize: 16,
+  },
+  submitButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#C084FC',
+    borderRadius: 10,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  submitButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  submitButtonTextTablet: {
+    fontSize: 16,
+  },
+  roleDetailsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  roleDetailsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.9,
+  },
+  roleDetailsModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  roleDetailsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  roleDetailsTitleContainer: {
+    flex: 1,
+  },
+  roleDetailsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  roleDetailsModalTitleTablet: {
+    fontSize: 24,
+  },
+  roleDetailsModalSubtitle: {
+    fontSize: 14,
+    color: '#C084FC',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  roleDetailsModalSubtitleTablet: {
+    fontSize: 16,
+    marginTop: 4,
+  },
+  roleDetailsModalBody: {
+    padding: 20,
+  },
+  roleDetailsModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  closeDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+    flex: 1,
+  },
+  closeDetailsButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  closeDetailsButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  closeDetailsButtonTextTablet: {
+    fontSize: 16,
+  },
+  detailsLoader: {
+    marginTop: 40,
+    marginBottom: 40,
+  },
+  roleInfoSection: {
+    marginBottom: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  sectionTitleTablet: {
+    fontSize: 18,
+  },
+  countBadge: {
+    backgroundColor: '#C084FC',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 30,
+    alignItems: 'center',
+  },
+  countBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  roleInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  infoItem: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  fullWidthItem: {
+    width: '100%',
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  descriptionText: {
+    fontWeight: '400',
+    lineHeight: 20,
+  },
+  departmentsGrid: {
+    gap: 12,
+  },
+  departmentChip: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  departmentIcon: {
+    marginTop: 2,
+    marginRight: 12,
+  },
+  departmentInfo: {
+    flex: 1,
+  },
+  departmentNameDetails: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  departmentModuleDetails: {
+    fontSize: 12,
+    color: '#C084FC',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  departmentDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  permissionsListContainer: {
+    gap: 12,
+  },
+  permissionRow: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+  },
+  permissionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  permissionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    flex: 1,
+    marginRight: 12,
+  },
+  permissionBadge: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  permissionBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  permissionDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  permissionMeta: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  permissionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  permissionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.9,
+  },
+  permissionModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  permissionModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  permissionModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  permissionModalTitleTablet: {
+    fontSize: 24,
+  },
+  permissionModalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  permissionModalSubtitleTablet: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  permissionModalBody: {
+    padding: 20,
+    maxHeight: height * 0.7,
+  },
+  permissionModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    gap: 12,
+  },
   permissionsSection: {
     marginBottom: 24,
   },
@@ -2228,78 +2237,6 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     marginTop: 8,
     textAlign: 'right',
-  },
-  summaryCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FAF5FF',
-    borderWidth: 1,
-    borderColor: '#EDE9FE',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    marginTop: 8,
-  },
-  summaryContent: {
-    flex: 1,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  summaryDetails: {
-    gap: 4,
-  },
-  summaryText: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  cancelButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 10,
-    paddingVertical: 14,
-  },
-  cancelButtonTablet: {
-    borderRadius: 12,
-    paddingVertical: 16,
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  cancelButtonTextTablet: {
-    fontSize: 16,
-  },
-  submitButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#C084FC',
-    borderRadius: 10,
-    paddingVertical: 14,
-    gap: 8,
-  },
-  submitButtonTablet: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  submitButtonTextTablet: {
-    fontSize: 16,
   },
 });
 

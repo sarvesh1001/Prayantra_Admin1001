@@ -12,9 +12,19 @@ import { ApiError } from '@/types';
 /* ============================================================
    API CONFIG
    ============================================================ */
+   const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-const API_BASE_URL = 'http://192.168.31.102:8080/api/v1';
-const API_TIMEOUT = 30000;
+   if (!API_BASE_URL) {
+     throw new Error(
+       '❌ EXPO_PUBLIC_API_BASE_URL is missing. App cannot start.'
+     );
+   }
+    
+ const API_VERSION =
+   process.env.EXPO_PUBLIC_API_VERSION ?? '/api/v1';
+ 
+ const FULL_API_URL = `${API_BASE_URL}${API_VERSION}`;
+ const API_TIMEOUT = 30000;
 
 /* ============================================================
    API SERVICE (SINGLETON)
@@ -36,7 +46,7 @@ class ApiService {
 
   private constructor() {
     this.api = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: FULL_API_URL,
       timeout: API_TIMEOUT,
       headers: {
         'Content-Type': 'application/json',

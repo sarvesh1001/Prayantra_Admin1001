@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 
-const { width } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
 
 interface OTPInputProps {
   length?: number;
@@ -39,6 +39,21 @@ const OTPInput = forwardRef<OTPInputRef, OTPInputProps>(({
   const [otp, setOtp] = useState<string[]>(Array(length).fill(''));
   const inputsRef = useRef<TextInput[]>([]);
 
+  // Calculate responsive dimensions
+  const calculateDimensions = () => {
+    const totalSpacing = (length - 1) * 8; // Spacing between inputs
+    const availableWidth = Math.min(screenWidth - 40, 400); // Max width 400, min padding
+    const inputWidth = (availableWidth - totalSpacing) / length;
+    
+    return {
+      inputWidth: Math.max(44, Math.min(60, inputWidth)), // Min 44, Max 60
+      inputHeight: 60,
+      containerWidth: availableWidth,
+    };
+  };
+
+  const dimensions = calculateDimensions();
+
   useEffect(() => {
     if (autoFocus) {
       setTimeout(() => {
@@ -54,7 +69,7 @@ const OTPInput = forwardRef<OTPInputRef, OTPInputProps>(({
     
     // Handle paste
     if (text.length > 1) {
-      const pastedDigits = text.split('').slice(0, length);
+      const pastedDigits = text.replace(/[^0-9]/g, '').split('').slice(0, length);
       pastedDigits.forEach((digit, idx) => {
         if (idx < length) {
           newOtp[idx] = digit;
@@ -162,7 +177,7 @@ const OTPInput = forwardRef<OTPInputRef, OTPInputProps>(({
 
   return (
     <View style={styles.container}>
-      <View style={styles.inputsContainer}>
+      <View style={[styles.inputsContainer, { width: dimensions.containerWidth }]}>
         {Array.from({ length }).map((_, index) => (
           <View key={index} style={styles.inputWrapper}>
             <TextInput
@@ -171,6 +186,10 @@ const OTPInput = forwardRef<OTPInputRef, OTPInputProps>(({
               }}
               style={[
                 styles.input,
+                { 
+                  width: dimensions.inputWidth,
+                  height: dimensions.inputHeight,
+                },
                 error && styles.inputError,
                 otp[index] && styles.inputFilled,
               ]}
@@ -222,10 +241,11 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingVertical: 20,
+    width: '100%',
   },
   inputsContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 30,
   },
@@ -234,8 +254,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   input: {
-    width: 50,
-    height: 60,
     borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 12,
@@ -254,7 +272,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   separator: {
-    width: 10,
+    width: 8,
   },
   errorText: {
     color: '#EF4444',
@@ -269,7 +287,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 40,
     marginBottom: 16,
-    width: '80%',
+    width: '100%',
+    maxWidth: 300,
   },
   submitButtonDisabled: {
     backgroundColor: '#D1D5DB',

@@ -363,8 +363,11 @@ const styles = StyleSheet.create({
   },
   mpinContainer: {
     marginBottom: 24,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  errorContainer: {
+    errorContainer: {
     backgroundColor: '#FEF2F2',
     padding: 16,
     borderRadius: 8,

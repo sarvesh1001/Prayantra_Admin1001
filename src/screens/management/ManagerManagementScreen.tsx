@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,30 +12,223 @@ import {
   Dimensions,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import { api } from '@/services/api';
-import { Role } from '@/types/role';
+import { 
+  Role, 
+  AdminRoleDetailsResponse,
+  RoleDetails
+} from '@/types';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
-const isSmallScreen = width < 375;
+
+interface ManagerRolesResponse {
+  meta: {
+    count: number;
+    role_type?: string;
+    role_type_string?: string;
+  };
+  roles: Role[];
+}
+
+interface Department {
+  system_department_id: string;
+  name: string;
+  module_code: string;
+  description: string;
+  bitmask: number;
+}
+
+interface AdminDepartmentsResponse {
+  success: boolean;
+  data: {
+    departments: Department[];
+    meta: {
+      admin_id: string;
+      count: number;
+    };
+  };
+  message: string;
+  timestamp: string;
+}
+
+interface CreateManagerRoleRequest {
+  role_name: string;
+  description: string;
+  department_names: string[];
+}
+
+interface RoleListItem {
+  item: Role;
+}
+
+interface DepartmentListItem {
+  item: Department;
+}
+
+interface RoleDetailsModalProps {
+  visible: boolean;
+  onClose: () => void;
+  roleDetails: RoleDetails | null;
+  isLoading: boolean;
+}
+
+const RoleDetailsModal: React.FC<RoleDetailsModalProps> = ({
+  visible,
+  onClose,
+  roleDetails,
+  isLoading,
+}) => {
+  if (!roleDetails) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+      statusBarTranslucent={true}
+    >
+      <View style={styles.roleDetailsModalOverlay}>
+        <View style={[styles.roleDetailsModalContent, isTablet && styles.roleDetailsModalContentTablet]}>
+          <View style={styles.roleDetailsModalHeader}>
+            <View style={styles.roleDetailsTitleContainer}>
+              <Text style={[styles.roleDetailsModalTitle, isTablet && styles.roleDetailsModalTitleTablet]}>
+                Manager Role Details
+              </Text>
+              <Text style={[styles.roleDetailsModalSubtitle, isTablet && styles.roleDetailsModalSubtitleTablet]}>
+                {roleDetails.role.role_name}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView 
+            style={styles.roleDetailsModalBody}
+            showsVerticalScrollIndicator={false}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="large" color="#8B5CF6" style={styles.detailsLoader} />
+            ) : (
+              <>
+                <View style={styles.roleInfoSection}>
+                  <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleTablet]}>
+                    Role Information
+                  </Text>
+                  <View style={styles.roleInfoGrid}>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Role Name</Text>
+                      <Text style={styles.infoValue}>{roleDetails.role.role_name}</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Role Level</Text>
+                      <Text style={styles.infoValue}>Level {roleDetails.role.role_level}</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Role Type</Text>
+                      <Text style={styles.infoValue}>Manager</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>System Role</Text>
+                      <Text style={styles.infoValue}>
+                        {roleDetails.role.is_system_role ? 'Yes' : 'No'}
+                      </Text>
+                    </View>
+                    <View style={[styles.infoItem, styles.fullWidthItem]}>
+                      <Text style={styles.infoLabel}>Description</Text>
+                      <Text style={[styles.infoValue, styles.descriptionText]}>
+                        {roleDetails.role.description || 'No description'}
+                      </Text>
+                    </View>
+                    <View style={[styles.infoItem, styles.fullWidthItem]}>
+                      <Text style={styles.infoLabel}>Created</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(roleDetails.role.created_at).toLocaleDateString()} at{' '}
+                        {new Date(roleDetails.role.created_at).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleTablet]}>
+                      Assigned Departments ({roleDetails.departments.length})
+                    </Text>
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{roleDetails.departments.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.departmentsGrid}>
+                    {roleDetails.departments.map((dept) => (
+                      <View key={dept.system_department_id} style={styles.departmentChip}>
+                        <MaterialCommunityIcons 
+                          name="office-building-cog" 
+                          size={16} 
+                          color="#8B5CF6" 
+                          style={styles.departmentIcon}
+                        />
+                        <View style={styles.departmentInfo}>
+                          <Text style={styles.departmentNameDetails}>{dept.name}</Text>
+                          <Text style={styles.departmentModuleDetails}>{dept.module_code}</Text>
+                          <Text style={styles.departmentDesc} numberOfLines={2}>
+                            {dept.description}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.managerNoteSection}>
+                  <MaterialCommunityIcons name="shield-check" size={20} color="#8B5CF6" />
+                  <Text style={styles.managerNoteText}>
+                    Manager roles automatically receive all permissions for their assigned departments.
+                  </Text>
+                </View>
+              </>
+            )}
+          </ScrollView>
+
+          <View style={styles.roleDetailsModalFooter}>
+            <TouchableOpacity
+              style={[styles.closeDetailsButton, isTablet && styles.closeDetailsButtonTablet]}
+              onPress={onClose}
+            >
+              <MaterialCommunityIcons name="close" size={isTablet ? 20 : 16} color="#64748B" />
+              <Text style={[styles.closeDetailsButtonText, isTablet && styles.closeDetailsButtonTextTablet]}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 const ManagerManagementScreen = () => {
-  const { adminInfo, adminId } = useAuth();
+  const { adminId } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   
   const [isCreateModalVisible, setCreateModalVisible] = useState(false);
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [isRoleDetailsModalVisible, setRoleDetailsModalVisible] = useState(false);
+  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
   const [roleName, setRoleName] = useState('');
   const [description, setDescription] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedRoleDetails, setSelectedRoleDetails] = useState<RoleDetails | null>(null);
+  const [loadingRoleDetails, setLoadingRoleDetails] = useState(false);
 
-  // Fetch manager roles
   const {
     data: rolesData,
     isLoading: isLoadingRoles,
@@ -43,69 +236,84 @@ const ManagerManagementScreen = () => {
     refetch: refetchRoles,
   } = useQuery({
     queryKey: ['managerRoles'],
-    queryFn: () => api.getManagerRoles(),
+    queryFn: async () => {
+      const res = await api.getManagerRoles();
+      return res.data.data;
+    },
   });
 
-  // Filter roles based on search query
-  const filteredRoles = React.useMemo(() => {
-    if (!searchQuery.trim() || !rolesData?.data?.roles) {
-      return rolesData?.data?.roles || [];
-    }
-  
-    const query = searchQuery.toLowerCase();
-  
-    return rolesData.data.roles.filter((role: Role) =>
-      role.role_name.toLowerCase().includes(query) ||
-      (role.description && role.description.toLowerCase().includes(query))
-    );
-  }, [rolesData, searchQuery]);
-  
-  // Filter departments to only show Manager Management department
-  const filteredDepartments = React.useMemo(() => {
-    const allDepartments = adminInfo?.departments || [];
-    
-    // Only show departments that have "manager_management" in the name or module_code
-    return allDepartments.filter(dept => 
-      dept.includes('Manager Management') || 
-      dept.toLowerCase().includes('manager_management')
-    );
-  }, [adminInfo]);
+  const {
+    data: departmentsData,
+    isLoading: isLoadingDepartments,
+    refetch: refetchDepartments,
+  } = useQuery<AdminDepartmentsResponse>({
+    queryKey: ['adminDepartments', adminId],
+    queryFn: async () => {
+      if (!adminId) throw new Error('Admin ID is required');
+      const response = await api.getAdminDepartments(adminId);
+      return response.data;
+    },
+    enabled: !!adminId,
+  });
 
-  // Pre-select Manager Management department if available
-  useEffect(() => {
-    if (filteredDepartments.length > 0 && selectedDepartments.length === 0) {
-      setSelectedDepartments(filteredDepartments);
-    }
-  }, [filteredDepartments]);
-
-  // Create role mutation
   const createRoleMutation = useMutation({
-    mutationFn: (roleData: any) => api.createManagerRole(roleData),
-    onSuccess: () => {
+    mutationFn: (roleData: CreateManagerRoleRequest) => 
+      api.createManagerRole(roleData),
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['managerRoles'] });
       setCreateModalVisible(false);
       resetForm();
-      showToast('success', 'Manager role created successfully');
+      showToast('success', response.data?.message || 'Manager role created successfully');
     },
     onError: (error: any) => {
+      console.error('Create role error:', error);
       if (error.response?.status === 409) {
         showToast('error', 'Role name already exists');
+      } else if (error.response?.status === 401) {
+        showToast('error', 'Session expired. Please login again');
+      } else if (error.response?.status === 403) {
+        showToast('error', 'You do not have permission to create manager roles');
       } else {
         showToast('error', error.response?.data?.message || 'Failed to create role');
       }
     },
   });
 
+  const fetchRoleDetails = async (roleId: string) => {
+    setLoadingRoleDetails(true);
+    try {
+      const response = await api.getAdminRoleWithDetails(roleId);
+      const data = response.data as AdminRoleDetailsResponse;
+      setSelectedRoleDetails(data.data);
+      setRoleDetailsModalVisible(true);
+    } catch (error: any) {
+      console.error('Error fetching role details:', error);
+      showToast('error', error.response?.data?.message || 'Failed to load role details');
+    } finally {
+      setLoadingRoleDetails(false);
+    }
+  };
+
+  const handleRoleClick = (roleId: string) => {
+    fetchRoleDetails(roleId);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refetchRoles(), refetchDepartments()]);
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const resetForm = () => {
     setRoleName('');
     setDescription('');
-    setSelectedDepartments(filteredDepartments); // Reset to default
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await refetchRoles();
-    setRefreshing(false);
+    setSelectedDepartments([]);
+    setCreateModalVisible(false);
   };
 
   const handleCreateRole = () => {
@@ -115,103 +323,42 @@ const ManagerManagementScreen = () => {
     }
 
     if (selectedDepartments.length === 0) {
-      showToast('error', 'Manager Management department must be selected');
+      showToast('error', 'Select at least one department');
       return;
     }
 
-    // Validate department selection (should only be Manager Management)
-    const invalidDepartments = selectedDepartments.filter(dept => 
-      !dept.includes('Manager Management')
-    );
-    
-    if (invalidDepartments.length > 0) {
-      showToast('error', 'Manager roles can only be assigned to Manager Management department');
-      return;
-    }
+    const department_names = selectedDepartments.map(dept => dept.name);
 
-    const roleData = {
+    const roleData: CreateManagerRoleRequest = {
       role_name: roleName.trim(),
       description: description.trim(),
-      department_names: selectedDepartments,
+      department_names,
     };
 
     createRoleMutation.mutate(roleData);
   };
 
-  const toggleDepartmentSelection = (departmentName: string) => {
-    // For Manager Management, we can only select/deselect Manager Management
-    if (departmentName.includes('Manager Management')) {
-      setSelectedDepartments(prev => {
-        if (prev.includes(departmentName)) {
-          // Don't allow deselection of Manager Management if it's the only one
-          if (filteredDepartments.length === 1) {
-            showToast('info', 'Manager Management department is required');
-            return prev;
-          }
-          return prev.filter(d => d !== departmentName);
-        } else {
-          return [...prev, departmentName];
-        }
-      });
+  const toggleDepartmentSelection = (department: Department) => {
+    const departmentName = department.name;
+    
+    if (selectedDepartments.some(dept => dept.name === departmentName)) {
+      setSelectedDepartments(prev => prev.filter(d => d.name !== departmentName));
     } else {
-      // Show error if trying to select non-manager-management department
-      showToast('error', 'Manager roles can only be assigned to Manager Management department');
+      setSelectedDepartments(prev => [...prev, department]);
     }
   };
 
-  const renderRoleCard = ({ item }: { item: Role }) => (
-    <TouchableOpacity
-      style={[styles.roleCard, isTablet && styles.roleCardTablet]}
-      onPress={() => {
-        // Navigate to role details or show actions
-        showToast('info', `${item.role_name} selected`);
-      }}
-      activeOpacity={0.7}
-    >
-      <View style={styles.roleHeader}>
-        <View style={[styles.roleIconContainer, styles.managerIcon]}>
-          <MaterialCommunityIcons 
-            name="account-tie" 
-            size={isTablet ? 28 : 24} 
-            color="#8B5CF6" 
-          />
-        </View>
-        <View style={styles.roleInfo}>
-          <Text style={[styles.roleName, isTablet && styles.roleNameTablet]}>
-            {item.role_name}
-          </Text>
-          <Text style={styles.roleDescription} numberOfLines={2}>
-            {item.description || 'No description'}
-          </Text>
-        </View>
-        <View style={[styles.roleBadge, styles.managerBadge]}>
-          <Text style={styles.roleBadgeText}>
-            Level {item.role_level}
-          </Text>
-        </View>
-      </View>
-      
-      <View style={styles.roleFooter}>
-        <View style={styles.roleTypeContainer}>
-          <MaterialCommunityIcons 
-            name="shield-account" 
-            size={isTablet ? 16 : 14} 
-            color="#8B5CF6" 
-          />
-          <Text style={styles.roleType}>
-            {item.role_type === 2 ? 'Manager Role' : 'Unknown'}
-          </Text>
-        </View>
-        <Text style={styles.roleDate}>
-          {new Date(item.created_at).toLocaleDateString()}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const filteredRoles = rolesData?.roles?.filter((role: Role) => {
+    if (!searchQuery.trim()) return true;
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      role.role_name.toLowerCase().includes(searchLower) ||
+      role.description?.toLowerCase().includes(searchLower)
+    );
+  }) || [];
 
-  const renderDepartmentItem = ({ item }: { item: string }) => {
-    const isManagerManagement = item.includes('Manager Management');
-    const isSelected = selectedDepartments.includes(item);
+  const renderDepartmentItem = ({ item }: DepartmentListItem) => {
+    const isSelected = selectedDepartments.some(dept => dept.name === item.name);
     
     return (
       <TouchableOpacity
@@ -219,16 +366,14 @@ const ManagerManagementScreen = () => {
           styles.departmentItem,
           isSelected && styles.departmentItemSelected,
           isTablet && styles.departmentItemTablet,
-          !isManagerManagement && styles.departmentItemDisabled,
         ]}
         onPress={() => toggleDepartmentSelection(item)}
-        disabled={!isManagerManagement}
-        activeOpacity={isManagerManagement ? 0.7 : 1}
+        disabled={createRoleMutation.isPending}
       >
         <MaterialCommunityIcons
-          name={isManagerManagement ? "shield-account" : "office-building"}
+          name={isSelected ? "office-building-cog" : "office-building"}
           size={isTablet ? 24 : 20}
-          color={isSelected ? '#8B5CF6' : (isManagerManagement ? '#64748B' : '#CBD5E1')}
+          color={isSelected ? '#8B5CF6' : '#64748B'}
         />
         <View style={styles.departmentTextContainer}>
           <Text
@@ -236,220 +381,228 @@ const ManagerManagementScreen = () => {
               styles.departmentName,
               isSelected && styles.departmentNameSelected,
               isTablet && styles.departmentNameTablet,
-              !isManagerManagement && styles.departmentNameDisabled,
             ]}
             numberOfLines={1}
           >
-            {item}
+            {item.name}
           </Text>
-          {isManagerManagement && (
-            <Text style={styles.departmentSubtext}>
-              Manager oversight and coordination
-            </Text>
-          )}
+          <Text
+            style={[
+              styles.departmentModule,
+              isTablet && styles.departmentModuleTablet,
+            ]}
+            numberOfLines={1}
+          >
+            Module: {item.module_code}
+          </Text>
         </View>
-        {isSelected && (
-          <MaterialCommunityIcons
-            name="check-circle"
-            size={isTablet ? 24 : 20}
-            color="#8B5CF6"
-          />
-        )}
-        {!isManagerManagement && (
-          <MaterialCommunityIcons
-            name="lock"
-            size={isTablet ? 16 : 14}
-            color="#CBD5E1"
-            style={styles.lockIcon}
-          />
-        )}
       </TouchableOpacity>
     );
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, isTablet && styles.headerTablet]}>
-        <View style={styles.headerContent}>
-          <View style={styles.titleContainer}>
+  const renderRoleItem = ({ item }: RoleListItem) => (
+    <TouchableOpacity onPress={() => handleRoleClick(item.admin_role_id)}>
+      <View style={[styles.roleCard, isTablet && styles.roleCardTablet]}>
+        <View style={styles.roleHeader}>
+          <View style={[styles.roleIconContainer, styles.managerIconContainer]}>
             <MaterialCommunityIcons 
-              name="shield-account" 
-              size={isTablet ? 32 : 24} 
-              color="#8B5CF6" 
+              name={item.is_system_role ? "shield-account" : "account-tie"} 
+              size={isTablet ? 28 : 24} 
+              color={item.is_system_role ? "#10B981" : "#8B5CF6"} 
             />
-            <Text style={[styles.title, isTablet && styles.titleTablet]}>
-              Manager Roles
+          </View>
+          <View style={styles.roleInfo}>
+            <Text style={[styles.roleName, isTablet && styles.roleNameTablet]}>{item.role_name}</Text>
+            <Text style={styles.roleDescription} numberOfLines={2}>
+              {item.description || 'No description'}
             </Text>
           </View>
-          <Text style={[styles.subtitle, isTablet && styles.subtitleTablet]}>
-            Create and manage manager roles with Manager Management permissions
-          </Text>
+          <View style={[
+            styles.roleBadge,
+            item.role_level >= 3000 && styles.roleBadgeHigh,
+            item.role_level < 2000 && styles.roleBadgeLow
+          ]}>
+            <Text style={styles.roleBadgeText}>
+              Lvl {item.role_level}
+            </Text>
+          </View>
         </View>
         
-        <TouchableOpacity
-          style={[styles.createButton, isTablet && styles.createButtonTablet]}
-          onPress={() => setCreateModalVisible(true)}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons 
-            name="plus" 
-            size={isTablet ? 24 : 20} 
-            color="#FFFFFF" 
-          />
-          <Text style={[styles.createButtonText, isTablet && styles.createButtonTextTablet]}>
-            New Role
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Bar */}
-      <View style={[styles.searchContainer, isTablet && styles.searchContainerTablet]}>
-        <MaterialCommunityIcons 
-          name="magnify" 
-          size={isTablet ? 24 : 20} 
-          color="#64748B" 
-        />
-        <TextInput
-          style={[styles.searchInput, isTablet && styles.searchInputTablet]}
-          placeholder="Search manager roles..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#94A3B8"
-          clearButtonMode="while-editing"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
+        <View style={styles.roleFooter}>
+          <View style={styles.roleTypeContainer}>
             <MaterialCommunityIcons 
-              name="close-circle" 
-              size={isTablet ? 20 : 16} 
-              color="#94A3B8" 
+              name={item.is_system_role ? "shield-check" : "account-tie"} 
+              size={14} 
+              color="#64748B" 
             />
-          </TouchableOpacity>
-        )}
+            <Text style={styles.roleType}>
+              {item.is_system_role ? 'System Manager Role' : 'Manager Role'}
+            </Text>
+          </View>
+          <Text style={styles.roleDate}>
+            {new Date(item.created_at).toLocaleDateString()}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={[styles.header, isTablet && styles.headerTablet]}>
+        <View style={isTablet && styles.headerContentTablet}>
+          <Text style={[styles.title, isTablet && styles.titleTablet]}>Manager Role Management</Text>
+          <Text style={[styles.subtitle, isTablet && styles.subtitleTablet]}>
+            Manage manager roles and departments • {rolesData?.meta?.count || 0} roles
+          </Text>
+        </View>
       </View>
 
-      {/* Stats Bar */}
       <View style={[styles.statsContainer, isTablet && styles.statsContainerTablet]}>
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, isTablet && styles.statValueTablet]}>
-            {filteredRoles.length}
-          </Text>
-          <Text style={[styles.statLabel, isTablet && styles.statLabelTablet]}>
-            Total Roles
-          </Text>
+          <MaterialCommunityIcons name="account-tie" size={20} color="#8B5CF6" />
+          <Text style={styles.statCount}>{filteredRoles.length}</Text>
+          <Text style={styles.statLabel}>Total Roles</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={[styles.statValue, isTablet && styles.statValueTablet]}>
-            {filteredDepartments.length}
+          <MaterialCommunityIcons name="shield-account" size={20} color="#10B981" />
+          <Text style={styles.statCount}>
+            {filteredRoles.filter((r: Role) => r.is_system_role).length}
           </Text>
-          <Text style={[styles.statLabel, isTablet && styles.statLabelTablet]}>
-            Departments
+          <Text style={styles.statLabel}>System Roles</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <MaterialCommunityIcons name="office-building-cog" size={20} color="#F59E0B" />
+          <Text style={styles.statCount}>
+            {selectedDepartments.length}
           </Text>
+          <Text style={styles.statLabel}>Depts Selected</Text>
         </View>
       </View>
 
-      {/* Roles List */}
       <FlatList
         data={filteredRoles}
-        renderItem={renderRoleCard}
-        keyExtractor={(item) => item.admin_role_id}
+        renderItem={renderRoleItem}
+        keyExtractor={(item: Role) => item.admin_role_id}
         contentContainerStyle={[
-          styles.content,
-          filteredRoles.length === 0 && styles.emptyContent,
+          styles.rolesList,
+          isTablet && styles.rolesListTablet,
+          filteredRoles.length === 0 && styles.emptyListContainer,
         ]}
-        showsVerticalScrollIndicator={false}
         numColumns={isTablet ? 2 : 1}
         columnWrapperStyle={isTablet && styles.rolesGridTablet}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
+            onRefresh={onRefresh}
             colors={['#8B5CF6']}
             tintColor="#8B5CF6"
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            {isLoadingRoles ? (
-              <ActivityIndicator size="large" color="#8B5CF6" />
-            ) : rolesError ? (
-              <>
-                <MaterialCommunityIcons 
-                  name="alert-circle" 
-                  size={isTablet ? 64 : 48} 
-                  color="#EF4444" 
-                />
-                <Text style={[styles.errorText, isTablet && styles.errorTextTablet]}>
-                  Failed to load manager roles
-                </Text>
+          isLoadingRoles ? (
+            <ActivityIndicator size="large" color="#8B5CF6" style={styles.loader} />
+          ) : rolesError ? (
+            <View style={styles.errorContainer}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={isTablet ? 80 : 64} color="#EF4444" />
+              <Text style={[styles.errorText, isTablet && styles.errorTextTablet]}>
+                Failed to load manager roles
+              </Text>
+              <Text style={[styles.errorSubtext, isTablet && styles.errorSubtextTablet]}>
+                {(rolesError as Error).message || 'Please try again'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.retryButton, isTablet && styles.retryButtonTablet]}
+                onPress={() => refetchRoles()}
+              >
+                <MaterialCommunityIcons name="reload" size={20} color="#FFFFFF" />
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="account-tie-outline" size={isTablet ? 100 : 80} color="#CBD5E1" />
+              <Text style={[styles.emptyText, isTablet && styles.emptyTextTablet]}>
+                No manager roles found
+              </Text>
+              <Text style={[styles.emptySubtext, isTablet && styles.emptySubtextTablet]}>
+                {searchQuery ? 'Try a different search term' : 'Create your first manager role'}
+              </Text>
+              {!searchQuery && (
                 <TouchableOpacity
-                  style={styles.retryButton}
-                  onPress={() => refetchRoles()}
+                  style={[styles.emptyActionButton, isTablet && styles.emptyActionButtonTablet]}
+                  onPress={() => setCreateModalVisible(true)}
                 >
-                  <Text style={styles.retryButtonText}>Retry</Text>
+                  <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
+                  <Text style={styles.emptyActionButtonText}>Create Role</Text>
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <MaterialCommunityIcons 
-                  name="shield-account-outline" 
-                  size={isTablet ? 80 : 64} 
-                  color="#CBD5E1" 
-                />
-                <Text style={[styles.emptyText, isTablet && styles.emptyTextTablet]}>
-                  No manager roles found
-                </Text>
-                <Text style={[styles.emptySubtext, isTablet && styles.emptySubtextTablet]}>
-                  {searchQuery ? 'Try a different search term' : 'Create your first manager role'}
-                </Text>
-                {!searchQuery && (
-                  <TouchableOpacity
-                    style={[styles.createEmptyButton, isTablet && styles.createEmptyButtonTablet]}
-                    onPress={() => setCreateModalVisible(true)}
-                  >
-                    <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
-                    <Text style={styles.createEmptyButtonText}>Create Manager Role</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-          </View>
+              )}
+            </View>
+          )
         }
+        showsVerticalScrollIndicator={false}
       />
 
-      {/* Create Role Modal */}
+      <View style={[styles.footer, isTablet && styles.footerTablet]}>
+        <TouchableOpacity 
+          style={styles.footerButton}
+          onPress={() => {
+            setSearchQuery('');
+            refetchRoles();
+            showToast('success', 'Manager roles refreshed successfully');
+          }}
+        >
+          <View style={[styles.footerIconContainer, styles.refreshIconContainer]}>
+            <MaterialCommunityIcons name="reload" size={isTablet ? 28 : 24} color="#8B5CF6" />
+          </View>
+          <Text style={styles.footerButtonText}>Refresh</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.footerButton}
+          onPress={() => setCreateModalVisible(true)}
+        >
+          <View style={[styles.footerIconContainer, styles.createIconContainer]}>
+            <MaterialCommunityIcons name="plus" size={isTablet ? 28 : 24} color="#FFFFFF" />
+          </View>
+          <Text style={styles.footerButtonText}>Create</Text>
+        </TouchableOpacity>
+      </View>
+
       <Modal
         visible={isCreateModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setCreateModalVisible(false)}
+        onRequestClose={() => {
+          if (!createRoleMutation.isPending) {
+            setCreateModalVisible(false);
+          }
+        }}
         statusBarTranslucent={true}
       >
-        <View style={styles.modalContainer}>
+        <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, isTablet && styles.modalContentTablet]}>
             <View style={styles.modalHeader}>
-              <View style={styles.modalTitleContainer}>
-                <MaterialCommunityIcons 
-                  name="shield-account" 
-                  size={isTablet ? 28 : 24} 
-                  color="#8B5CF6" 
-                />
+              <View>
                 <Text style={[styles.modalTitle, isTablet && styles.modalTitleTablet]}>
                   Create Manager Role
                 </Text>
+                <Text style={[styles.modalSubtitle, isTablet && styles.modalSubtitleTablet]}>
+                  Select departments for manager role
+                </Text>
               </View>
               <TouchableOpacity 
-                onPress={() => setCreateModalVisible(false)}
-                style={styles.closeButton}
-                activeOpacity={0.7}
+                onPress={() => {
+                  if (!createRoleMutation.isPending) {
+                    setCreateModalVisible(false);
+                    resetForm();
+                  }
+                }}
+                disabled={createRoleMutation.isPending}
               >
-                <MaterialCommunityIcons 
-                  name="close" 
-                  size={isTablet ? 28 : 24} 
-                  color="#64748B" 
-                />
+                <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -458,33 +611,34 @@ const ManagerManagementScreen = () => {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <View style={styles.modalNote}>
-                <MaterialCommunityIcons 
-                  name="information" 
-                  size={isTablet ? 20 : 16} 
-                  color="#8B5CF6" 
-                />
-                <Text style={[styles.modalNoteText, isTablet && styles.modalNoteTextTablet]}>
-                  Manager roles automatically get ALL Manager Management permissions
-                </Text>
+              <View style={styles.managerInfoCard}>
+                <MaterialCommunityIcons name="information" size={20} color="#8B5CF6" />
+                <View style={styles.managerInfoContent}>
+                  <Text style={styles.managerInfoTitle}>Manager Role Information</Text>
+                  <Text style={styles.managerInfoText}>
+                    Manager roles automatically receive ALL permissions for their assigned departments.
+                    No additional permission configuration is required.
+                  </Text>
+                </View>
               </View>
 
-              {/* Role Name */}
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
-                  Role Name *
-                </Text>
+                <View style={styles.inputLabelRow}>
+                  <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                    Role Name
+                  </Text>
+                  <Text style={styles.requiredStar}>*</Text>
+                </View>
                 <TextInput
                   style={[styles.textInput, isTablet && styles.textInputTablet]}
                   value={roleName}
                   onChangeText={setRoleName}
-                  placeholder="e.g., Senior Manager"
+                  placeholder="e.g., Sales Manager, Operations Manager"
                   placeholderTextColor="#94A3B8"
-                  maxLength={50}
+                  editable={!createRoleMutation.isPending}
                 />
               </View>
 
-              {/* Description */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
                   Description
@@ -493,55 +647,76 @@ const ManagerManagementScreen = () => {
                   style={[styles.textInput, styles.textArea, isTablet && styles.textAreaTablet]}
                   value={description}
                   onChangeText={setDescription}
-                  placeholder="Describe the manager role..."
+                  placeholder="Describe the manager role purpose and responsibilities..."
                   placeholderTextColor="#94A3B8"
                   multiline
                   numberOfLines={isTablet ? 4 : 3}
-                  maxLength={200}
+                  editable={!createRoleMutation.isPending}
                 />
-                <Text style={styles.charCount}>
-                  {description.length}/200
-                </Text>
               </View>
 
-              {/* Department Selection */}
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
-                  Assigned Department *
-                </Text>
+                <View style={styles.inputLabelRow}>
+                  <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                    Select Departments
+                  </Text>
+                  <Text style={styles.requiredStar}>*</Text>
+                </View>
                 <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
-                  Manager roles can only be assigned to Manager Management department
+                  Departments for manager oversight • {selectedDepartments.length} selected
                 </Text>
                 
-                <View style={styles.departmentList}>
-                  {filteredDepartments.map((dept, index) => (
-                    <View key={index} style={styles.departmentItemWrapper}>
-                      {renderDepartmentItem({ item: dept })}
-                    </View>
-                  ))}
-                  
-                  {filteredDepartments.length === 0 && (
-                    <View style={styles.noDepartmentContainer}>
-                      <MaterialCommunityIcons 
-                        name="alert" 
-                        size={isTablet ? 32 : 24} 
-                        color="#F59E0B" 
-                      />
-                      <Text style={styles.noDepartmentText}>
-                        You don't have access to Manager Management department
+                {isLoadingDepartments ? (
+                  <ActivityIndicator size="small" color="#8B5CF6" style={styles.smallLoader} />
+                ) : (
+                  <FlatList
+                    data={departmentsData?.data?.departments || []}
+                    renderItem={renderDepartmentItem}
+                    keyExtractor={(item: Department) => item.system_department_id}
+                    numColumns={isTablet ? 3 : 2}
+                    columnWrapperStyle={styles.departmentGrid}
+                    scrollEnabled={false}
+                    ListEmptyComponent={
+                      <View style={styles.noDepartments}>
+                        <MaterialCommunityIcons name="office-building" size={40} color="#CBD5E1" />
+                        <Text style={styles.noDepartmentsText}>No departments available</Text>
+                      </View>
+                    }
+                  />
+                )}
+              </View>
+
+              {selectedDepartments.length > 0 && (
+                <View style={styles.summaryCard}>
+                  <MaterialCommunityIcons name="clipboard-check-outline" size={24} color="#8B5CF6" />
+                  <View style={styles.summaryContent}>
+                    <Text style={styles.summaryTitle}>Manager Role Summary</Text>
+                    <View style={styles.summaryDetails}>
+                      <Text style={styles.summaryText}>
+                        • Departments: {selectedDepartments.length}
+                      </Text>
+                      <Text style={styles.summaryText}>
+                        • Manager will receive: ALL permissions for selected departments
+                      </Text>
+                      <Text style={styles.summaryText}>
+                        • Modules: {selectedDepartments.map(d => d.module_code).join(', ')}
+                      </Text>
+                      <Text style={styles.summaryText}>
+                        • Role Type: Manager (Type 2)
                       </Text>
                     </View>
-                  )}
+                  </View>
                 </View>
-              </View>
+              )}
             </ScrollView>
 
-            {/* Modal Footer */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-                onPress={() => setCreateModalVisible(false)}
-                activeOpacity={0.7}
+                onPress={() => {
+                  setCreateModalVisible(false);
+                  resetForm();
+                }}
                 disabled={createRoleMutation.isPending}
               >
                 <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
@@ -553,23 +728,19 @@ const ManagerManagementScreen = () => {
                 style={[
                   styles.submitButton,
                   isTablet && styles.submitButtonTablet,
-                  (createRoleMutation.isPending || selectedDepartments.length === 0) && styles.submitButtonDisabled,
+                  createRoleMutation.isPending && styles.submitButtonDisabled,
+                  (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
                 ]}
                 onPress={handleCreateRole}
-                disabled={createRoleMutation.isPending || selectedDepartments.length === 0}
-                activeOpacity={0.8}
+                disabled={createRoleMutation.isPending || !roleName.trim() || selectedDepartments.length === 0}
               >
                 {createRoleMutation.isPending ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <MaterialCommunityIcons 
-                      name="shield-check" 
-                      size={isTablet ? 24 : 20} 
-                      color="#FFFFFF" 
-                    />
+                    <MaterialCommunityIcons name="shield-check" size={isTablet ? 24 : 20} color="#FFFFFF" />
                     <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                      Create Role
+                      Create Manager Role
                     </Text>
                   </>
                 )}
@@ -578,7 +749,17 @@ const ManagerManagementScreen = () => {
           </View>
         </View>
       </Modal>
-    </View>
+
+      <RoleDetailsModal
+        visible={isRoleDetailsModalVisible}
+        onClose={() => {
+          setRoleDetailsModalVisible(false);
+          setSelectedRoleDetails(null);
+        }}
+        roleDetails={selectedRoleDetails}
+        isLoading={loadingRoleDetails}
+      />
+    </SafeAreaView>
   );
 };
 
@@ -588,30 +769,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   headerTablet: {
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 16,
   },
-  headerContent: {
+  headerContentTablet: {
     flex: 1,
-    marginBottom: 12,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+  headerIconButton: {
+    padding: 8,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1E293B',
   },
@@ -619,127 +804,94 @@ const styles = StyleSheet.create({
     fontSize: 28,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#64748B',
-    lineHeight: 20,
+    marginTop: 2,
   },
   subtitleTablet: {
     fontSize: 16,
-    lineHeight: 24,
-  },
-  createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#8B5CF6',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 8,
-    alignSelf: 'flex-start',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  createButtonTablet: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 10,
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  createButtonTextTablet: {
-    fontSize: 16,
+    marginTop: 4,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     margin: 16,
-    marginBottom: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   searchContainerTablet: {
     margin: 24,
-    marginBottom: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 12,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
+    marginLeft: 8,
+    marginRight: 8,
+    fontSize: 14,
     color: '#1E293B',
-    fontFamily: 'System',
   },
   searchInputTablet: {
-    marginLeft: 16,
-    fontSize: 18,
+    marginLeft: 12,
+    marginRight: 12,
+    fontSize: 16,
   },
   statsContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
+    marginTop: 12,        // ✅ ADD THIS
     marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 10,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   statsContainerTablet: {
+    marginTop: 16,        // ✅ ADD THIS
     marginHorizontal: 24,
-    marginBottom: 20,
-    padding: 20,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 24,
+  statCount: {
+    fontSize: 18,
     fontWeight: '700',
-    color: '#8B5CF6',
-  },
-  statValueTablet: {
-    fontSize: 28,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748B',
+    color: '#1E293B',
     marginTop: 4,
   },
-  statLabelTablet: {
-    fontSize: 14,
-    marginTop: 6,
+  statLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
   },
   statDivider: {
     width: 1,
-    height: '80%',
+    height: '100%',
     backgroundColor: '#E2E8F0',
-    marginHorizontal: 16,
   },
-  content: {
+  rolesList: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
-  emptyContent: {
+  rolesListTablet: {
+    paddingHorizontal: 24,
+  },
+  emptyListContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
+  },
+  rolesGridTablet: {
+    justifyContent: 'space-between',
+    gap: 16,
   },
   roleCard: {
     backgroundColor: '#FFFFFF',
@@ -749,16 +901,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 2,
     elevation: 2,
   },
   roleCardTablet: {
     flex: 1,
-    margin: 8,
+    minWidth: '48%',
     marginBottom: 16,
-    padding: 20,
   },
   roleHeader: {
     flexDirection: 'row',
@@ -766,48 +917,51 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   roleIconContainer: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  managerIcon: {
+  managerIconContainer: {
     backgroundColor: '#F5F3FF',
   },
   roleInfo: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 12,
   },
   roleName: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1E293B',
-    marginBottom: 4,
   },
   roleNameTablet: {
-    fontSize: 20,
-    marginBottom: 6,
+    fontSize: 18,
   },
   roleDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#64748B',
-    lineHeight: 20,
+    marginTop: 4,
+    lineHeight: 16,
   },
   roleBadge: {
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
-  managerBadge: {
-    backgroundColor: '#F5F3FF',
+  roleBadgeHigh: {
+    backgroundColor: '#D1FAE5',
+  },
+  roleBadgeLow: {
+    backgroundColor: '#FEF3C7',
   },
   roleBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#8B5CF6',
+    color: '#475569',
   },
   roleFooter: {
     flexDirection: 'row',
@@ -823,88 +977,156 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   roleType: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#475569',
     fontWeight: '500',
   },
   roleDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#94A3B8',
   },
-  rolesGridTablet: {
-    justifyContent: 'space-between',
+  loader: {
+    marginTop: 60,
   },
-  emptyContainer: {
+  smallLoader: {
+    paddingVertical: 20,
+  },
+  errorContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 32,
+    marginTop: 60,
+    padding: 16,
   },
   errorText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#EF4444',
-    marginTop: 16,
+    color: '#1E293B',
+    marginTop: 12,
     textAlign: 'center',
   },
   errorTextTablet: {
-    fontSize: 18,
-    marginTop: 20,
-  },
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#64748B',
-    marginTop: 16,
-  },
-  emptyTextTablet: {
     fontSize: 20,
-    marginTop: 20,
+    marginTop: 16,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#94A3B8',
-    marginTop: 8,
+  errorSubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
     textAlign: 'center',
   },
-  emptySubtextTablet: {
-    fontSize: 16,
-    marginTop: 10,
+  errorSubtextTablet: {
+    fontSize: 14,
+    marginTop: 6,
   },
-  createEmptyButton: {
+  retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+    marginTop: 16,
+  },
+  retryButtonTablet: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
-    gap: 8,
-    marginTop: 24,
   },
-  createEmptyButtonTablet: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  createEmptyButtonText: {
+  retryButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
-  // Modal Styles
-  modalContainer: {
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 60,
+    padding: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 12,
+  },
+  emptyTextTablet: {
+    fontSize: 20,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  emptySubtextTablet: {
+    fontSize: 14,
+    marginTop: 6,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+    marginTop: 16,
+  },
+  emptyActionButtonTablet: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  emptyActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  footer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  footerTablet: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  footerButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  refreshIconContainer: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+  },
+  createIconContainer: {
+    backgroundColor: '#8B5CF6',
+  },
+  footerButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
@@ -913,191 +1135,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: height * 0.9,
+    maxHeight: height * 0.85,
   },
   modalContentTablet: {
     maxHeight: height * 0.9,
-    marginHorizontal: 'auto',
-    width: isTablet ? '70%' : '100%',
-    borderRadius: 20,
+    width: isTablet ? '80%' : '100%',
     alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  modalTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1E293B',
   },
   modalTitleTablet: {
     fontSize: 24,
   },
-  closeButton: {
-    padding: 4,
+  modalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  modalSubtitleTablet: {
+    fontSize: 14,
+    marginTop: 4,
   },
   modalBody: {
     padding: 20,
-  },
-  modalNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F5F3FF',
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 24,
-    gap: 12,
-  },
-  modalNoteText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#8B5CF6',
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  modalNoteTextTablet: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  inputLabelTablet: {
-    fontSize: 18,
-    marginBottom: 10,
-  },
-  inputSubtext: {
-    fontSize: 14,
-    color: '#64748B',
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  inputSubtextTablet: {
-    fontSize: 16,
-    marginBottom: 20,
-    lineHeight: 24,
-  },
-  textInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#1E293B',
-    fontFamily: 'System',
-  },
-  textInputTablet: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    fontSize: 18,
-    borderRadius: 12,
-  },
-  textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-    paddingTop: 14,
-  },
-  textAreaTablet: {
-    minHeight: 120,
-    paddingTop: 16,
-  },
-  charCount: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  departmentList: {
-    marginTop: 8,
-  },
-  departmentItemWrapper: {
-    marginBottom: 8,
-  },
-  departmentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    width: '100%',
-  },
-  departmentItemTablet: {
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    borderRadius: 12,
-  },
-  departmentItemSelected: {
-    backgroundColor: '#F5F3FF',
-    borderColor: '#8B5CF6',
-  },
-  departmentItemDisabled: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-    opacity: 0.6,
-  },
-  departmentTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8,
-  },
-  departmentName: {
-    fontSize: 16,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  departmentNameTablet: {
-    fontSize: 18,
-  },
-  departmentNameSelected: {
-    color: '#8B5CF6',
-    fontWeight: '600',
-  },
-  departmentNameDisabled: {
-    color: '#CBD5E1',
-  },
-  departmentSubtext: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 2,
-  },
-  lockIcon: {
-    marginLeft: 8,
-  },
-  noDepartmentContainer: {
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FBBF24',
-  },
-  noDepartmentText: {
-    fontSize: 14,
-    color: '#92400E',
-    textAlign: 'center',
-    marginTop: 12,
-    lineHeight: 20,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -1107,58 +1180,409 @@ const styles = StyleSheet.create({
     borderTopColor: '#E2E8F0',
     gap: 12,
   },
+  managerInfoCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 24,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+  },
+  managerInfoContent: {
+    flex: 1,
+  },
+  managerInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  managerInfoText: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  inputGroup: {
+    marginBottom: 24,
+  },
+  inputLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 6,
+  },
+  inputLabelTablet: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  requiredStar: {
+    color: '#EF4444',
+    fontSize: 14,
+  },
+  inputSubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 12,
+  },
+  inputSubtextTablet: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  textInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#1E293B',
+  },
+  textInputTablet: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    borderRadius: 12,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  textAreaTablet: {
+    minHeight: 100,
+  },
+  departmentGrid: {
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  departmentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '48%',
+    minHeight: 60,
+  },
+  departmentItemTablet: {
+    width: '31%',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 64,
+  },
+  departmentItemSelected: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#8B5CF6',
+  },
+  departmentTextContainer: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  departmentName: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  departmentNameTablet: {
+    fontSize: 14,
+  },
+  departmentNameSelected: {
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  departmentModule: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  departmentModuleTablet: {
+    fontSize: 11,
+  },
+  noDepartments: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDepartmentsText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    marginTop: 8,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  summaryDetails: {
+    gap: 4,
+  },
+  summaryText: {
+    fontSize: 11,
+    color: '#64748B',
+  },
   cancelButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F1F5F9',
     borderRadius: 10,
-    paddingVertical: 16,
+    paddingVertical: 14,
   },
   cancelButtonTablet: {
     borderRadius: 12,
-    paddingVertical: 18,
+    paddingVertical: 16,
   },
   cancelButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#64748B',
   },
   cancelButtonTextTablet: {
-    fontSize: 18,
+    fontSize: 16,
   },
   submitButton: {
-    flex: 2,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#8B5CF6',
     borderRadius: 10,
-    paddingVertical: 16,
-    gap: 10,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 14,
+    gap: 8,
   },
   submitButtonTablet: {
     borderRadius: 12,
-    paddingVertical: 18,
-    gap: 12,
+    paddingVertical: 16,
+    gap: 10,
   },
   submitButtonDisabled: {
-    backgroundColor: '#CBD5E1',
-    shadowOpacity: 0,
-    elevation: 0,
+    opacity: 0.6,
   },
   submitButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
     color: '#FFFFFF',
   },
   submitButtonTextTablet: {
+    fontSize: 16,
+  },
+  roleDetailsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  roleDetailsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.9,
+  },
+  roleDetailsModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  roleDetailsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  roleDetailsTitleContainer: {
+    flex: 1,
+  },
+  roleDetailsModalTitle: {
     fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  roleDetailsModalTitleTablet: {
+    fontSize: 24,
+  },
+  roleDetailsModalSubtitle: {
+    fontSize: 14,
+    color: '#8B5CF6',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  roleDetailsModalSubtitleTablet: {
+    fontSize: 16,
+    marginTop: 4,
+  },
+  roleDetailsModalBody: {
+    padding: 20,
+  },
+  roleDetailsModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  closeDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+    flex: 1,
+  },
+  closeDetailsButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  closeDetailsButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  closeDetailsButtonTextTablet: {
+    fontSize: 16,
+  },
+  detailsLoader: {
+    marginTop: 40,
+    marginBottom: 40,
+  },
+  roleInfoSection: {
+    marginBottom: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  sectionTitleTablet: {
+    fontSize: 18,
+  },
+  countBadge: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 30,
+    alignItems: 'center',
+  },
+  countBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  roleInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  infoItem: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  fullWidthItem: {
+    width: '100%',
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  descriptionText: {
+    fontWeight: '400',
+    lineHeight: 20,
+  },
+  departmentsGrid: {
+    gap: 12,
+  },
+  departmentChip: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  departmentIcon: {
+    marginTop: 2,
+    marginRight: 12,
+  },
+  departmentInfo: {
+    flex: 1,
+  },
+  departmentNameDetails: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  departmentModuleDetails: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  departmentDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  managerNoteSection: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+  },
+  managerNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
   },
 });
 

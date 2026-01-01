@@ -9,48 +9,1112 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Dimensions,
-  Platform,
-  RefreshControl,
   FlatList,
+  Dimensions,
+  RefreshControl,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/Toast';
 import { api } from '@/services/api';
-import { Role, Department, Permission, RoleDetailsResponse } from '@/types';
+import {
+  Role,
+  Department,
+  Permission,
+  AdminRoleDetailsResponse,
+  RoleDetails,
+  UpdateRoleRequest,
+  DepartmentPermissions,
+  CreateEmployeeRoleRequest,
+  CreateManagerRoleRequest,
+} from '@/types';
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
-const isSmallScreen = width < 375;
 
+// Interfaces for API responses
+interface AllRolesResponse {
+  success: boolean;
+  data: {
+    meta: {
+      count: number;
+      limit: number;
+      offset: number;
+      total: number;
+    };
+    roles: Role[];
+  };
+  message: string;
+  timestamp: string;
+}
+
+interface SearchRolesResponse {
+  success: boolean;
+  data: {
+    meta: {
+      count: number;
+      limit: number;
+      offset: number;
+      total: number;
+    };
+    roles: Role[];
+  };
+  message: string;
+  timestamp: string;
+}
+
+interface RoleDepartmentsResponse {
+  success: boolean;
+  data: Department[];
+  message: string;
+  timestamp: string;
+}
+
+interface DepartmentListItem {
+  item: Department;
+}
+
+interface RoleListItem {
+  item: Role;
+}
+
+// Permission Selection Modal Component
+interface PermissionSelectionModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSave: (permissions: Record<string, string[]>) => void;
+  initialPermissions: Record<string, string[]>;
+  availablePermissions: Record<string, string[]>;
+  selectedDepartments: Department[];
+  isLoadingPermissions: boolean;
+  isManagerRole: boolean;
+}
+
+const PermissionSelectionModal: React.FC<PermissionSelectionModalProps> = ({
+  visible,
+  onClose,
+  onSave,
+  initialPermissions,
+  availablePermissions,
+  selectedDepartments,
+  isLoadingPermissions,
+  isManagerRole,
+}) => {
+  const [selectedPermissions, setSelectedPermissions] = useState<Record<string, string[]>>(initialPermissions);
+
+  useEffect(() => {
+    setSelectedPermissions(initialPermissions);
+  }, [initialPermissions]);
+
+  const togglePermission = (departmentName: string, permission: string) => {
+    setSelectedPermissions(prev => {
+      const currentPermissions = prev[departmentName] || [];
+      if (currentPermissions.includes(permission)) {
+        return {
+          ...prev,
+          [departmentName]: currentPermissions.filter(p => p !== permission),
+        };
+      } else {
+        return {
+          ...prev,
+          [departmentName]: [...currentPermissions, permission],
+        };
+      }
+    });
+  };
+
+  const toggleAllPermissions = (departmentName: string) => {
+    const currentSelected = selectedPermissions[departmentName] || [];
+    const allPermissions = availablePermissions[departmentName] || [];
+    if (currentSelected.length === allPermissions.length) {
+      setSelectedPermissions(prev => ({
+        ...prev,
+        [departmentName]: [],
+      }));
+    } else {
+      setSelectedPermissions(prev => ({
+        ...prev,
+        [departmentName]: allPermissions,
+      }));
+    }
+  };
+
+  const handleSave = () => {
+    onSave(selectedPermissions);
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+      statusBarTranslucent={true}
+    >
+      <View style={styles.permissionModalOverlay}>
+        <View style={[styles.permissionModalContent, isTablet && styles.permissionModalContentTablet]}>
+          <View style={styles.permissionModalHeader}>
+            <View>
+              <Text style={[styles.permissionModalTitle, isTablet && styles.permissionModalTitleTablet]}>
+                {isManagerRole ? 'Manager Permissions' : 'Select Permissions'}
+              </Text>
+              <Text style={[styles.permissionModalSubtitle, isTablet && styles.permissionModalSubtitleTablet]}>
+                {isManagerRole
+                  ? 'Manager roles automatically receive all permissions'
+                  : 'Configure permissions for selected departments'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.permissionModalBody}
+            showsVerticalScrollIndicator={false}
+          >
+            {selectedDepartments.map((dept, index) => {
+              const departmentName = dept.name;
+              const moduleCode = dept.module_code;
+              const permissions = selectedPermissions[departmentName] || [];
+              const allPermissions = availablePermissions[departmentName] || [];
+              const isAllSelected = permissions.length === allPermissions.length && permissions.length > 0;
+
+              return (
+                <View key={dept.system_department_id} style={styles.permissionsSection}>
+                  {isManagerRole ? (
+                    <View style={styles.managerPermissionInfo}>
+                      <MaterialCommunityIcons name="shield-check" size={20} color="#8B5CF6" />
+                      <Text style={styles.managerPermissionText}>
+                        Manager roles automatically get ALL permissions for the {departmentName} department
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <View style={styles.permissionsHeader}>
+                        <View>
+                          <Text style={[styles.permissionsTitle, isTablet && styles.permissionsTitleTablet]}>
+                            {departmentName}
+                          </Text>
+                          <Text style={styles.permissionsModule}>
+                            Module: {moduleCode}
+                          </Text>
+                        </View>
+                        {allPermissions.length > 0 && (
+                          <TouchableOpacity
+                            style={styles.selectAllButton}
+                            onPress={() => toggleAllPermissions(departmentName)}
+                          >
+                            <MaterialCommunityIcons
+                              name={isAllSelected ? "checkbox-marked" : "checkbox-blank-outline"}
+                              size={20}
+                              color={isAllSelected ? "#8B5CF6" : "#64748B"}
+                            />
+                            <Text style={[
+                              styles.selectAllText,
+                              isAllSelected && styles.selectAllTextSelected
+                            ]}>
+                              {isAllSelected ? 'Deselect All' : 'Select All'}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      {isLoadingPermissions ? (
+                        <View style={styles.loadingPermissions}>
+                          <ActivityIndicator size="small" color="#8B5CF6" />
+                          <Text style={[styles.loadingText, isTablet && styles.loadingTextTablet]}>
+                            Loading {moduleCode} permissions...
+                          </Text>
+                        </View>
+                      ) : allPermissions.length === 0 ? (
+                        <View style={styles.loadingPermissions}>
+                          <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#EF4444" />
+                          <Text style={[styles.loadingText, isTablet && styles.loadingTextTablet]}>
+                            No permissions available for {moduleCode} module
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.permissionsGrid}>
+                          {allPermissions.map((permission: string) => {
+                            const isSelected = permissions.includes(permission);
+                            return (
+                              <TouchableOpacity
+                                key={permission}
+                                style={[
+                                  styles.permissionChip,
+                                  isSelected && styles.permissionChipSelected,
+                                  isTablet && styles.permissionChipTablet,
+                                ]}
+                                onPress={() => togglePermission(departmentName, permission)}
+                              >
+                                <MaterialCommunityIcons
+                                  name={isSelected ? "check-circle" : "circle-outline"}
+                                  size={isTablet ? 20 : 16}
+                                  color={isSelected ? '#8B5CF6' : '#64748B'}
+                                />
+                                <Text
+                                  style={[
+                                    styles.permissionText,
+                                    isSelected && styles.permissionTextSelected,
+                                    isTablet && styles.permissionTextTablet,
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {permission}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      )}
+                      <Text style={styles.permissionsCount}>
+                        {permissions.length} of {allPermissions.length} permissions selected
+                      </Text>
+                    </>
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.permissionModalFooter}>
+            <TouchableOpacity
+              style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+              onPress={onClose}
+            >
+              <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.submitButton, isTablet && styles.submitButtonTablet]}
+              onPress={handleSave}
+            >
+              <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
+              <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                Save Permissions
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Role Details Modal Component
+const RoleDetailsModal: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  roleDetails: RoleDetails | null;
+  isLoading: boolean;
+}> = ({ visible, onClose, roleDetails, isLoading }) => {
+  if (!roleDetails) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+      statusBarTranslucent={true}
+    >
+      <View style={styles.roleDetailsModalOverlay}>
+        <View style={[styles.roleDetailsModalContent, isTablet && styles.roleDetailsModalContentTablet]}>
+          <View style={styles.roleDetailsModalHeader}>
+            <View style={styles.roleDetailsTitleContainer}>
+              <Text style={[styles.roleDetailsModalTitle, isTablet && styles.roleDetailsModalTitleTablet]}>
+                Role Details
+              </Text>
+              <Text style={[styles.roleDetailsModalSubtitle, isTablet && styles.roleDetailsModalSubtitleTablet]}>
+                {roleDetails.role.role_name}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose}>
+              <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.roleDetailsModalBody}
+            showsVerticalScrollIndicator={false}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="large" color="#8B5CF6" style={styles.detailsLoader} />
+            ) : (
+              <>
+                <View style={styles.roleInfoSection}>
+                  <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleTablet]}>
+                    Role Information
+                  </Text>
+                  <View style={styles.roleInfoGrid}>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Role Name</Text>
+                      <Text style={styles.infoValue}>{roleDetails.role.role_name}</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Role Level</Text>
+                      <Text style={styles.infoValue}>Level {roleDetails.role.role_level}</Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>Role Type</Text>
+                      <Text style={styles.infoValue}>
+                        {roleDetails.role.role_type === 1 ? 'Employee' :
+                         roleDetails.role.role_type === 2 ? 'Manager' :
+                         roleDetails.role.role_type === 3 ? 'Admin' :
+                         'Super Admin'}
+                      </Text>
+                    </View>
+                    <View style={styles.infoItem}>
+                      <Text style={styles.infoLabel}>System Role</Text>
+                      <Text style={styles.infoValue}>
+                        {roleDetails.role.is_system_role ? 'Yes' : 'No'}
+                      </Text>
+                    </View>
+                    <View style={[styles.infoItem, styles.fullWidthItem]}>
+                      <Text style={styles.infoLabel}>Description</Text>
+                      <Text style={[styles.infoValue, styles.descriptionText]}>
+                        {roleDetails.role.description || 'No description'}
+                      </Text>
+                    </View>
+                    <View style={[styles.infoItem, styles.fullWidthItem]}>
+                      <Text style={styles.infoLabel}>Created</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(roleDetails.role.created_at).toLocaleDateString()} at{' '}
+                        {new Date(roleDetails.role.created_at).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleTablet]}>
+                      Departments ({roleDetails.departments.length})
+                    </Text>
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{roleDetails.departments.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.departmentsGrid}>
+                    {roleDetails.departments.map((dept, index) => (
+                      <View key={dept.system_department_id} style={styles.departmentChip}>
+                        <MaterialCommunityIcons
+                          name="office-building"
+                          size={16}
+                          color="#8B5CF6"
+                          style={styles.departmentIcon}
+                        />
+                        <View style={styles.departmentInfo}>
+                          <Text style={styles.departmentNameDetails}>{dept.name}</Text>
+                          <Text style={styles.departmentModuleDetails}>{dept.module_code}</Text>
+                          <Text style={styles.departmentDesc} numberOfLines={2}>
+                            {dept.description}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleTablet]}>
+                      Permissions ({roleDetails.permissions.length})
+                    </Text>
+                    <View style={styles.countBadge}>
+                      <Text style={styles.countBadgeText}>{roleDetails.permissions.length}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.permissionsListContainer}>
+                    {roleDetails.permissions.map((perm, index) => (
+                      <View key={perm.permission_id} style={styles.permissionRow}>
+                        <View style={styles.permissionHeader}>
+                          <Text style={styles.permissionName}>{perm.permission_name}</Text>
+                          <View style={styles.permissionBadge}>
+                            <Text style={styles.permissionBadgeText}>{perm.module}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.permissionDescription}>{perm.description}</Text>
+                        <View style={styles.permissionMeta}>
+                          <View style={styles.permissionMetaItem}>
+                            <MaterialCommunityIcons name="tag" size={12} color="#64748B" />
+                            <Text style={styles.permissionMetaText}>{perm.category}</Text>
+                          </View>
+                          <View style={styles.permissionMetaItem}>
+                            <MaterialCommunityIcons name="shield" size={12} color="#64748B" />
+                            <Text style={styles.permissionMetaText}>{perm.scope}</Text>
+                          </View>
+                          <View style={styles.permissionMetaItem}>
+                            <MaterialCommunityIcons name="star" size={12} color="#64748B" />
+                            <Text style={styles.permissionMetaText}>{perm.requires_tier}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+          <View style={styles.roleDetailsModalFooter}>
+            <TouchableOpacity
+              style={[styles.closeDetailsButton, isTablet && styles.closeDetailsButtonTablet]}
+              onPress={onClose}
+            >
+              <MaterialCommunityIcons name="close" size={isTablet ? 20 : 16} color="#64748B" />
+              <Text style={[styles.closeDetailsButtonText, isTablet && styles.closeDetailsButtonTextTablet]}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Update Role Modal Component
+const UpdateRoleModal: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  role: Role | null;
+  onUpdate: (roleId: string, data: UpdateRoleRequest) => void;
+  isUpdating: boolean;
+}> = ({ visible, onClose, role, onUpdate, isUpdating }) => {
+  const [roleName, setRoleName] = useState('');
+  const [description, setDescription] = useState('');
+  const [addDepartments, setAddDepartments] = useState<string[]>([]);
+  const [removeDepartments, setRemoveDepartments] = useState<string[]>([]);
+  const [addPermissions, setAddPermissions] = useState<string[]>([]);
+  const [removePermissions, setRemovePermissions] = useState<string[]>([]);
+  const [replacePermissions, setReplacePermissions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (role) {
+      setRoleName(role.role_name);
+      setDescription(role.description || '');
+      setAddDepartments([]);
+      setRemoveDepartments([]);
+      setAddPermissions([]);
+      setRemovePermissions([]);
+      setReplacePermissions([]);
+    }
+  }, [role]);
+
+  const handleSubmit = () => {
+    if (!role || !roleName.trim()) {
+      Alert.alert('Error', 'Role name is required');
+      return;
+    }
+
+    const updateData: UpdateRoleRequest = {
+      role_name: roleName.trim(),
+      description: description.trim(),
+      add_departments: addDepartments,
+      remove_departments: removeDepartments,
+      add_permissions: addPermissions,
+      remove_permissions: removePermissions,
+      replace_permissions: replacePermissions,
+    };
+
+    onUpdate(role.admin_role_id, updateData);
+  };
+
+  if (!role) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+      statusBarTranslucent={true}
+    >
+      <View style={styles.updateModalOverlay}>
+        <View style={[styles.updateModalContent, isTablet && styles.updateModalContentTablet]}>
+          <View style={styles.updateModalHeader}>
+            <View>
+              <Text style={[styles.updateModalTitle, isTablet && styles.updateModalTitleTablet]}>
+                Update Role: {role.role_name}
+              </Text>
+              <Text style={[styles.updateModalSubtitle, isTablet && styles.updateModalSubtitleTablet]}>
+                Role ID: {role.admin_role_id.slice(0, 8)}...
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} disabled={isUpdating}>
+              <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.updateModalBody}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                  Role Name
+                </Text>
+                <Text style={styles.requiredStar}>*</Text>
+              </View>
+              <TextInput
+                style={[styles.textInput, isTablet && styles.textInputTablet]}
+                value={roleName}
+                onChangeText={setRoleName}
+                placeholder="Enter role name"
+                placeholderTextColor="#94A3B8"
+                editable={!isUpdating}
+              />
+            </View>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                Description
+              </Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea, isTablet && styles.textAreaTablet]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Enter role description"
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={isTablet ? 4 : 3}
+                editable={!isUpdating}
+              />
+            </View>
+            <View style={styles.warningCard}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#F59E0B" />
+              <View style={styles.warningContent}>
+                <Text style={styles.warningTitle}>Important Notes</Text>
+                <Text style={styles.warningText}>
+                  • Only non-system roles can be updated{'\n'}
+                  • Role level and type cannot be changed{'\n'}
+                  • Departments and permissions changes are applied immediately{'\n'}
+                  • System roles (like Super Admin) have limited updates
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+          <View style={styles.updateModalFooter}>
+            <TouchableOpacity
+              style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+              onPress={onClose}
+              disabled={isUpdating}
+            >
+              <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.submitButton,
+                isTablet && styles.submitButtonTablet,
+                isUpdating && styles.submitButtonDisabled,
+                (!roleName.trim() || role.is_system_role) && styles.submitButtonDisabled,
+              ]}
+              onPress={handleSubmit}
+              disabled={isUpdating || !roleName.trim() || role.is_system_role}
+            >
+              {isUpdating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
+                  <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                    Update Role
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// Create Role Modal Component
+const CreateRoleModal: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  onSave: (roleType: 'employee' | 'manager', data: any) => void;
+  isCreating: boolean;
+  availableDepartments: Department[];
+}> = ({ visible, onClose, onSave, isCreating, availableDepartments }) => {
+  const [roleType, setRoleType] = useState<'employee' | 'manager'>('employee');
+  const [roleName, setRoleName] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<Record<string, string[]>>({});
+  const [isPermissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [availablePermissions, setAvailablePermissions] = useState<Record<string, string[]>>({});
+  const [loadingPermissionsFor, setLoadingPermissionsFor] = useState<string[]>([]);
+
+  const resetForm = () => {
+    setRoleName('');
+    setDescription('');
+    setSelectedDepartments([]);
+    setSelectedPermissions({});
+    setAvailablePermissions({});
+    setLoadingPermissionsFor([]);
+    setPermissionModalVisible(false);
+  };
+
+  const handleClose = () => {
+    if (!isCreating) {
+      resetForm();
+      onClose();
+    }
+  };
+
+  const fetchPermissionsForModule = async (moduleCode: string, departmentName: string) => {
+    try {
+      setLoadingPermissionsFor(prev => [...prev, departmentName]);
+      const response = await api.getPermissionsByModule(moduleCode);
+      const permissionsData = response.data;
+      const rawPermissions = permissionsData?.data?.permissions;
+      const permissions: string[] = Array.isArray(rawPermissions)
+        ? rawPermissions.map((p: Permission) => p.permission_name)
+        : [];
+      setAvailablePermissions(prev => ({
+        ...prev,
+        [departmentName]: permissions,
+      }));
+      setSelectedPermissions(prev => ({
+        ...prev,
+        [departmentName]: [],
+      }));
+    } catch (error) {
+      console.error(`Error fetching permissions for module ${moduleCode}:`, error);
+      setAvailablePermissions(prev => ({
+        ...prev,
+        [departmentName]: [],
+      }));
+      setSelectedPermissions(prev => ({
+        ...prev,
+        [departmentName]: [],
+      }));
+    } finally {
+      setLoadingPermissionsFor(prev => prev.filter(name => name !== departmentName));
+    }
+  };
+
+  const toggleDepartmentSelection = async (department: Department) => {
+    const departmentName = department.name;
+    if (selectedDepartments.some(dept => dept.name === departmentName)) {
+      setSelectedDepartments(prev => prev.filter(d => d.name !== departmentName));
+      const newSelectedPermissions = { ...selectedPermissions };
+      delete newSelectedPermissions[departmentName];
+      setSelectedPermissions(newSelectedPermissions);
+      const newAvailablePermissions = { ...availablePermissions };
+      delete newAvailablePermissions[departmentName];
+      setAvailablePermissions(newAvailablePermissions);
+    } else {
+      setSelectedDepartments(prev => [...prev, department]);
+      if (!availablePermissions[departmentName]) {
+        await fetchPermissionsForModule(department.module_code, departmentName);
+      }
+    }
+  };
+
+  const handleOpenPermissionModal = async () => {
+    if (selectedDepartments.length === 0) {
+      Alert.alert('Error', 'Please select departments first');
+      return;
+    }
+    const departmentsToLoad = selectedDepartments.filter(
+      dept => !availablePermissions[dept.name]
+    );
+    if (departmentsToLoad.length > 0) {
+      await Promise.all(
+        departmentsToLoad.map(dept =>
+          fetchPermissionsForModule(dept.module_code, dept.name)
+        )
+      );
+    }
+    setPermissionModalVisible(true);
+  };
+
+  const handleCreateRole = () => {
+    if (!roleName.trim()) {
+      Alert.alert('Error', 'Role name is required');
+      return;
+    }
+    if (selectedDepartments.length === 0) {
+      Alert.alert('Error', 'Select at least one department');
+      return;
+    }
+
+    if (roleType === 'employee') {
+      // For employee roles, check permissions
+      const hasEmptyPermissions = selectedDepartments.some(dept => {
+        const deptName = dept.name;
+        return !selectedPermissions[deptName] || selectedPermissions[deptName].length === 0;
+      });
+      if (hasEmptyPermissions) {
+        Alert.alert('Error', 'Select at least one permission for each department');
+        return;
+      }
+
+      const department_permissions: DepartmentPermissions[] = selectedDepartments.map(dept => ({
+        department_name: dept.name,
+        permissions: selectedPermissions[dept.name] || [],
+      }));
+
+      const roleData: CreateEmployeeRoleRequest = {
+        role_name: roleName.trim(),
+        description: description.trim(),
+        department_permissions,
+      };
+
+      onSave('employee', roleData);
+    } else {
+      // For manager roles, just send department names
+      const department_names = selectedDepartments.map(dept => dept.name);
+      const roleData: CreateManagerRoleRequest = {
+        role_name: roleName.trim(),
+        description: description.trim(),
+        department_names,
+      };
+
+      onSave('manager', roleData);
+    }
+  };
+
+  const renderDepartmentItem = ({ item }: DepartmentListItem) => {
+    const isSelected = selectedDepartments.some(dept => dept.name === item.name);
+    return (
+      <TouchableOpacity
+        style={[
+          styles.departmentItem,
+          isSelected && styles.departmentItemSelected,
+          isTablet && styles.departmentItemTablet,
+        ]}
+        onPress={() => toggleDepartmentSelection(item)}
+        disabled={isCreating}
+      >
+        <MaterialCommunityIcons
+          name={isSelected ? "office-building-cog" : "office-building"}
+          size={isTablet ? 24 : 20}
+          color={isSelected ? '#8B5CF6' : '#64748B'}
+        />
+        <View style={styles.departmentTextContainer}>
+          <Text
+            style={[
+              styles.departmentName,
+              isSelected && styles.departmentNameSelected,
+              isTablet && styles.departmentNameTablet,
+            ]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text
+            style={[
+              styles.departmentModule,
+              isTablet && styles.departmentModuleTablet,
+            ]}
+            numberOfLines={1}
+          >
+            Module: {item.module_code}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={handleClose}
+      statusBarTranslucent={true}
+    >
+      <View style={styles.createModalOverlay}>
+        <View style={[styles.createModalContent, isTablet && styles.createModalContentTablet]}>
+          <View style={styles.createModalHeader}>
+            <View>
+              <Text style={[styles.createModalTitle, isTablet && styles.createModalTitleTablet]}>
+                Create New Role
+              </Text>
+              <Text style={[styles.createModalSubtitle, isTablet && styles.createModalSubtitleTablet]}>
+                Configure a new {roleType} role
+              </Text>
+            </View>
+            <TouchableOpacity onPress={handleClose} disabled={isCreating}>
+              <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.createModalBody}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Role Type Selection */}
+            <View style={styles.roleTypeSelector}>
+              <TouchableOpacity
+                style={[
+                  styles.roleTypeOption,
+                  roleType === 'employee' && styles.roleTypeOptionSelected,
+                ]}
+                onPress={() => setRoleType('employee')}
+                disabled={isCreating}
+              >
+                <MaterialCommunityIcons
+                  name="account"
+                  size={20}
+                  color={roleType === 'employee' ? '#8B5CF6' : '#64748B'}
+                />
+                <Text style={[
+                  styles.roleTypeText,
+                  roleType === 'employee' && styles.roleTypeTextSelected,
+                ]}>
+                  Employee Role
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.roleTypeOption,
+                  roleType === 'manager' && styles.roleTypeOptionSelected,
+                ]}
+                onPress={() => setRoleType('manager')}
+                disabled={isCreating}
+              >
+                <MaterialCommunityIcons
+                  name="account-tie"
+                  size={20}
+                  color={roleType === 'manager' ? '#8B5CF6' : '#64748B'}
+                />
+                <Text style={[
+                  styles.roleTypeText,
+                  roleType === 'manager' && styles.roleTypeTextSelected,
+                ]}>
+                  Manager Role
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Role Info */}
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                  Role Name
+                </Text>
+                <Text style={styles.requiredStar}>*</Text>
+              </View>
+              <TextInput
+                style={[styles.textInput, isTablet && styles.textInputTablet]}
+                value={roleName}
+                onChangeText={setRoleName}
+                placeholder="e.g., Sales Manager, Support Agent"
+                placeholderTextColor="#94A3B8"
+                editable={!isCreating}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                Description
+              </Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea, isTablet && styles.textAreaTablet]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Describe the role purpose and responsibilities..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={isTablet ? 4 : 3}
+                editable={!isCreating}
+              />
+            </View>
+
+            {/* Departments Selection */}
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                  Select Departments
+                </Text>
+                <Text style={styles.requiredStar}>*</Text>
+              </View>
+              <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
+                {availableDepartments.length} departments available • {selectedDepartments.length} selected
+              </Text>
+              <FlatList
+                data={availableDepartments}
+                renderItem={renderDepartmentItem}
+                keyExtractor={(item: Department) => item.system_department_id}
+                numColumns={isTablet ? 3 : 2}
+                columnWrapperStyle={styles.departmentGrid}
+                scrollEnabled={false}
+                ListEmptyComponent={
+                  <View style={styles.noDepartments}>
+                    <MaterialCommunityIcons name="office-building" size={40} color="#CBD5E1" />
+                    <Text style={styles.noDepartmentsText}>No departments available</Text>
+                  </View>
+                }
+              />
+            </View>
+
+            {/* Permissions Button (Employee Role Only) */}
+            {roleType === 'employee' && selectedDepartments.length > 0 && (
+              <View style={styles.inputGroup}>
+                <View style={styles.permissionsButtonContainer}>
+                  <View>
+                    <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                      Permissions Configuration
+                    </Text>
+                    <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
+                      Click to configure permissions for selected departments
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.permissionsButton, isTablet && styles.permissionsButtonTablet]}
+                    onPress={handleOpenPermissionModal}
+                    disabled={isCreating}
+                  >
+                    <MaterialCommunityIcons
+                      name="shield-edit"
+                      size={isTablet ? 24 : 20}
+                      color="#FFFFFF"
+                    />
+                    <Text style={[styles.permissionsButtonText, isTablet && styles.permissionsButtonTextTablet]}>
+                      Configure Permissions
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {/* Selected Permissions Summary */}
+                <View style={styles.permissionsSummary}>
+                  {selectedDepartments.map(dept => {
+                    const perms = selectedPermissions[dept.name] || [];
+                    return (
+                      <View key={dept.name} style={styles.departmentSummary}>
+                        <Text style={styles.departmentSummaryTitle}>
+                          {dept.name} ({perms.length} permissions)
+                        </Text>
+                        {perms.length > 0 ? (
+                          <Text style={styles.permissionsListText} numberOfLines={2}>
+                            {perms.join(', ')}
+                          </Text>
+                        ) : (
+                          <Text style={styles.noPermissionsText}>No permissions selected</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Manager Role Info */}
+            {roleType === 'manager' && (
+              <View style={styles.managerInfoCard}>
+                <MaterialCommunityIcons name="information" size={20} color="#8B5CF6" />
+                <View style={styles.managerInfoContent}>
+                  <Text style={styles.managerInfoTitle}>Manager Role Information</Text>
+                  <Text style={styles.managerInfoText}>
+                    Manager roles automatically receive ALL permissions for their assigned departments.
+                    No additional permission configuration is required.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Summary */}
+            {selectedDepartments.length > 0 && (
+              <View style={styles.summaryCard}>
+                <MaterialCommunityIcons name="clipboard-list-outline" size={24} color="#8B5CF6" />
+                <View style={styles.summaryContent}>
+                  <Text style={styles.summaryTitle}>Role Summary</Text>
+                  <View style={styles.summaryDetails}>
+                    <Text style={styles.summaryText}>
+                      • Role Type: {roleType === 'employee' ? 'Employee (Type 1)' : 'Manager (Type 2)'}
+                    </Text>
+                    <Text style={styles.summaryText}>
+                      • Departments: {selectedDepartments.length}
+                    </Text>
+                    <Text style={styles.summaryText}>
+                      • Modules: {selectedDepartments.map(d => d.module_code).join(', ')}
+                    </Text>
+                    {roleType === 'employee' ? (
+                      <Text style={styles.summaryText}>
+                        • Total Permissions: {Object.values(selectedPermissions).flat().length}
+                      </Text>
+                    ) : (
+                      <Text style={styles.summaryText}>
+                        • Manager will receive: ALL permissions for selected departments
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            )}
+          </ScrollView>
+          <View style={styles.createModalFooter}>
+            <TouchableOpacity
+              style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+              onPress={handleClose}
+              disabled={isCreating}
+            >
+              <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.submitButton,
+                isTablet && styles.submitButtonTablet,
+                isCreating && styles.submitButtonDisabled,
+                (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
+              ]}
+              onPress={handleCreateRole}
+              disabled={isCreating || !roleName.trim() || selectedDepartments.length === 0}
+            >
+              {isCreating ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="plus" size={isTablet ? 24 : 20} color="#FFFFFF" />
+                  <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                    Create {roleType === 'employee' ? 'Employee' : 'Manager'} Role
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Permission Selection Modal */}
+      <PermissionSelectionModal
+        visible={isPermissionModalVisible}
+        onClose={() => setPermissionModalVisible(false)}
+        onSave={(permissions) => setSelectedPermissions(permissions)}
+        initialPermissions={selectedPermissions}
+        availablePermissions={availablePermissions}
+        selectedDepartments={selectedDepartments}
+        isLoadingPermissions={loadingPermissionsFor.length > 0}
+        isManagerRole={roleType === 'manager'}
+      />
+    </Modal>
+  );
+};
+
+// Main Company Management Screen Component
 const CompanyManagementScreen = () => {
-  const { adminInfo } = useAuth();
+  const { adminId } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
-  
-  // State
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRoleType, setSelectedRoleType] = useState<'all' | 'employee' | 'manager' | 'super_admin'>('all');
+  const [isCreateModalVisible, setCreateModalVisible] = useState(false);
+  const [isUpdateModalVisible, setIsUpdateModalVisible] = useState(false);
+  const [isRoleDetailsModalVisible, setIsRoleDetailsModalVisible] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [roleDetails, setRoleDetails] = useState<RoleDetailsResponse['data'] | null>(null);
-  const [isDetailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [isDeleteModalVisible, setDeleteModalVisible] = useState(false);
-  const [isEditModalVisible, setEditModalVisible] = useState(false);
-  const [isDepartmentModalVisible, setDepartmentModalVisible] = useState(false);
-  const [isPermissionsModalVisible, setPermissionsModalVisible] = useState(false);
+  const [selectedRoleDetails, setSelectedRoleDetails] = useState<RoleDetails | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    role_name: '',
-    description: '',
-    add_departments: [] as string[],
-    remove_departments: [] as string[],
-    add_permissions: [] as string[],
-    remove_permissions: [] as string[],
-    replace_permissions: [] as string[],
-  });
-  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
-  const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>([]);
+  const [loadingRoleDetails, setLoadingRoleDetails] = useState(false);
+  const [availableDepartments, setAvailableDepartments] = useState<Department[]>([]);
 
   // Fetch all roles
   const {
@@ -58,912 +1122,541 @@ const CompanyManagementScreen = () => {
     isLoading: isLoadingRoles,
     error: rolesError,
     refetch: refetchRoles,
-  } = useQuery({
+  } = useQuery<AllRolesResponse>({
     queryKey: ['allRoles'],
-    queryFn: () => api.getAllRoles({ limit: 50, offset: 0 }),
-  });
-
-  // Fetch role details
-  const {
-    data: detailsData,
-    isLoading: isLoadingDetails,
-    refetch: refetchDetails,
-  } = useQuery({
-    queryKey: ['roleDetails', selectedRole?.admin_role_id],
-    queryFn: () => selectedRole ? api.getRoleDetails(selectedRole.admin_role_id) : null,
-    enabled: !!selectedRole && isDetailsModalVisible,
-  });
-
-  // Fetch role departments
-  const {
-    data: roleDepartmentsData,
-    refetch: refetchRoleDepartments,
-  } = useQuery({
-    queryKey: ['roleDepartments', selectedRole?.admin_role_id],
-    queryFn: () => selectedRole ? api.getRoleDepartments(selectedRole.admin_role_id) : null,
-    enabled: !!selectedRole && isDepartmentModalVisible,
-  });
-
-  // Fetch admin's departments
-  const {
-    data: adminDepartmentsData,
-  } = useQuery({
-    queryKey: ['adminDepartments'],
-    queryFn: () => adminInfo ? api.getAdminDepartments(adminInfo.admin_id) : null,
-    enabled: !!adminInfo,
-  });
-
-  // Mutations
-  const searchMutation = useMutation({
-    mutationFn: (query: string) => api.searchRoles(query, { limit: 50, offset: 0 }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allRoles'] });
+    queryFn: async () => {
+      const response = await api.getAllRoles({ limit: 100, offset: 0 });
+      return response.data;
     },
   });
 
+  // Fetch search results
+  const {
+    data: searchResults,
+    isLoading: isLoadingSearch,
+    refetch: refetchSearch,
+  } = useQuery<SearchRolesResponse>({
+    queryKey: ['searchRoles', searchQuery],
+    queryFn: async () => {
+      if (!searchQuery.trim()) return null;
+      const response = await api.searchRoles(searchQuery, { limit: 50, offset: 0 });
+      return response.data;
+    },
+    enabled: false,
+  });
+
+  // Fetch admin departments
+  const {
+    data: departmentsData,
+    isLoading: isLoadingDepartments,
+    refetch: refetchDepartments,
+  } = useQuery({
+    queryKey: ['adminDepartments', adminId],
+    queryFn: async () => {
+      if (!adminId) throw new Error('Admin ID is required');
+      const response = await api.getAdminDepartments(adminId);
+      return response.data;
+    },
+    enabled: !!adminId,
+  });
+
+  useEffect(() => {
+    if (departmentsData?.data?.departments) {
+      setAvailableDepartments(departmentsData.data.departments);
+    }
+  }, [departmentsData]);
+
+  // Create employee role mutation
+  const createEmployeeRoleMutation = useMutation({
+    mutationFn: (roleData: CreateEmployeeRoleRequest) =>
+      api.createEmployeeRole(roleData),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['allRoles'] });
+      queryClient.invalidateQueries({ queryKey: ['employeeRoles'] });
+      setCreateModalVisible(false);
+      showToast('success', response.data?.message || 'Employee role created successfully');
+    },
+    onError: (error: any) => {
+      console.error('Create role error:', error);
+      if (error.response?.status === 409) {
+        showToast('error', 'Role name already exists');
+      } else if (error.response?.status === 401) {
+        showToast('error', 'Session expired. Please login again');
+      } else if (error.response?.status === 403) {
+        showToast('error', 'You do not have permission to create roles');
+      } else {
+        showToast('error', error.response?.data?.message || 'Failed to create role');
+      }
+    },
+  });
+
+  // Create manager role mutation
+  const createManagerRoleMutation = useMutation({
+    mutationFn: (roleData: CreateManagerRoleRequest) =>
+      api.createManagerRole(roleData),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['allRoles'] });
+      queryClient.invalidateQueries({ queryKey: ['managerRoles'] });
+      setCreateModalVisible(false);
+      showToast('success', response.data?.message || 'Manager role created successfully');
+    },
+    onError: (error: any) => {
+      console.error('Create manager role error:', error);
+      if (error.response?.status === 409) {
+        showToast('error', 'Role name already exists');
+      } else if (error.response?.status === 401) {
+        showToast('error', 'Session expired. Please login again');
+      } else if (error.response?.status === 403) {
+        showToast('error', 'You do not have permission to create manager roles');
+      } else {
+        showToast('error', error.response?.data?.message || 'Failed to create manager role');
+      }
+    },
+  });
+
+  // Update role mutation
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ roleId, data }: { roleId: string; data: UpdateRoleRequest }) =>
+      api.updateRole(roleId, data),
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['allRoles'] });
+      setIsUpdateModalVisible(false);
+      setSelectedRole(null);
+      showToast('success', response.data?.message || 'Role updated successfully');
+    },
+    onError: (error: any) => {
+      console.error('Update role error:', error);
+      if (error.response?.status === 401) {
+        showToast('error', 'Session expired. Please login again');
+      } else if (error.response?.status === 403) {
+        showToast('error', 'You do not have permission to update roles');
+      } else if (error.response?.status === 404) {
+        showToast('error', 'Role not found');
+      } else {
+        showToast('error', error.response?.data?.message || 'Failed to update role');
+      }
+    },
+  });
+
+  // Delete role mutation
   const deleteRoleMutation = useMutation({
     mutationFn: (roleId: string) => api.deleteRole(roleId),
-    onSuccess: () => {
+    onSuccess: (response, roleId) => {
       queryClient.invalidateQueries({ queryKey: ['allRoles'] });
-      setDeleteModalVisible(false);
-      showToast('success', 'Role deleted successfully');
+      showToast('success', response.data?.message || 'Role deleted successfully');
     },
     onError: (error: any) => {
-      showToast('error', error.response?.data?.message || 'Failed to delete role');
+      console.error('Delete role error:', error);
+      if (error.response?.status === 401) {
+        showToast('error', 'Session expired. Please login again');
+      } else if (error.response?.status === 403) {
+        showToast('error', 'You do not have permission to delete roles');
+      } else if (error.response?.status === 404) {
+        showToast('error', 'Role not found');
+      } else if (error.response?.status === 409) {
+        showToast('error', 'Cannot delete system role');
+      } else {
+        showToast('error', error.response?.data?.message || 'Failed to delete role');
+      }
     },
   });
 
-  const updateRoleMutation = useMutation({
-    mutationFn: ({ roleId, data }: { roleId: string; data: any }) => api.updateRole(roleId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['allRoles'] });
-      queryClient.invalidateQueries({ queryKey: ['roleDetails', selectedRole?.admin_role_id] });
-      queryClient.invalidateQueries({ queryKey: ['roleDepartments', selectedRole?.admin_role_id] });
-      setEditModalVisible(false);
-      showToast('success', 'Role updated successfully');
-    },
-    onError: (error: any) => {
-      showToast('error', error.response?.data?.message || 'Failed to update role');
-    },
-  });
-
-  const assignDepartmentMutation = useMutation({
-    mutationFn: ({ roleId, deptId }: { roleId: string; deptId: string }) => 
-      api.assignDepartmentToRole(roleId, deptId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roleDetails', selectedRole?.admin_role_id] });
-      queryClient.invalidateQueries({ queryKey: ['roleDepartments', selectedRole?.admin_role_id] });
-      showToast('success', 'Department assigned successfully');
-    },
-    onError: (error: any) => {
-      showToast('error', error.response?.data?.message || 'Failed to assign department');
-    },
-  });
-
-  const removeDepartmentMutation = useMutation({
-    mutationFn: ({ roleId, deptId }: { roleId: string; deptId: string }) => 
-      api.removeDepartmentFromRole(roleId, deptId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roleDetails', selectedRole?.admin_role_id] });
-      queryClient.invalidateQueries({ queryKey: ['roleDepartments', selectedRole?.admin_role_id] });
-      showToast('success', 'Department removed successfully');
-    },
-    onError: (error: any) => {
-      showToast('error', error.response?.data?.message || 'Failed to remove department');
-    },
-  });
-
-  // Handlers
-  const handleSearch = () => {
-    if (searchQuery.trim()) {
-      searchMutation.mutate(searchQuery.trim());
-    } else {
-      refetchRoles();
+  const fetchRoleDetails = async (roleId: string) => {
+    setLoadingRoleDetails(true);
+    try {
+      const response = await api.getAdminRoleWithDetails(roleId);
+      const data = response.data as AdminRoleDetailsResponse;
+      setSelectedRoleDetails(data.data);
+      setIsRoleDetailsModalVisible(true);
+    } catch (error: any) {
+      console.error('Error fetching role details:', error);
+      showToast('error', error.response?.data?.message || 'Failed to load role details');
+    } finally {
+      setLoadingRoleDetails(false);
     }
   };
 
-  const handleViewDetails = async (role: Role) => {
+  const handleRoleClick = (role: Role) => {
     setSelectedRole(role);
-    setDetailsModalVisible(true);
+    fetchRoleDetails(role.admin_role_id);
   };
 
   const handleEditRole = (role: Role) => {
+    if (role.is_system_role) {
+      showToast('error', 'System roles cannot be edited');
+      return;
+    }
     setSelectedRole(role);
-    setEditForm({
-      role_name: role.role_name,
-      description: role.description,
-      add_departments: [],
-      remove_departments: [],
-      add_permissions: [],
-      remove_permissions: [],
-      replace_permissions: [],
-    });
-    setEditModalVisible(true);
+    setIsUpdateModalVisible(true);
   };
 
-  const handleManageDepartments = (role: Role) => {
-    setSelectedRole(role);
-    setDepartmentModalVisible(true);
-  };
-
-  const handleViewPermissions = (role: Role) => {
-    setSelectedRole(role);
-    setPermissionsModalVisible(true);
-  };
-
-  const handleDeleteRole = () => {
-    if (selectedRole && !selectedRole.is_system_role) {
-      deleteRoleMutation.mutate(selectedRole.admin_role_id);
-    } else {
+  const handleDeleteRole = (role: Role) => {
+    if (role.is_system_role) {
       showToast('error', 'System roles cannot be deleted');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Role',
+      `Are you sure you want to delete "${role.role_name}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteRoleMutation.mutate(role.admin_role_id),
+        },
+      ]
+    );
+  };
+
+  const handleUpdateRole = (roleId: string, data: UpdateRoleRequest) => {
+    updateRoleMutation.mutate({ roleId, data });
+  };
+
+  const handleCreateRole = (roleType: 'employee' | 'manager', data: any) => {
+    if (roleType === 'employee') {
+      createEmployeeRoleMutation.mutate(data);
+    } else {
+      createManagerRoleMutation.mutate(data);
     }
   };
 
-  const handleUpdateRole = () => {
-    if (selectedRole) {
-      const updateData: any = {};
-      if (editForm.role_name !== selectedRole.role_name) updateData.role_name = editForm.role_name;
-      if (editForm.description !== selectedRole.description) updateData.description = editForm.description;
-      if (editForm.add_departments.length > 0) updateData.add_departments = editForm.add_departments;
-      if (editForm.remove_departments.length > 0) updateData.remove_departments = editForm.remove_departments;
-      if (editForm.add_permissions.length > 0) updateData.add_permissions = editForm.add_permissions;
-      if (editForm.remove_permissions.length > 0) updateData.remove_permissions = editForm.remove_permissions;
-      if (editForm.replace_permissions.length > 0) updateData.replace_permissions = editForm.replace_permissions;
-
-      if (Object.keys(updateData).length > 0) {
-        updateRoleMutation.mutate({ roleId: selectedRole.admin_role_id, data: updateData });
-      } else {
-        setEditModalVisible(false);
-        showToast('info', 'No changes made');
-      }
-    }
-  };
-
-  const handleRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    refetchRoles().finally(() => setRefreshing(false));
-  };
-
-  const handleAssignDepartment = (deptId: string) => {
-    if (selectedRole) {
-      assignDepartmentMutation.mutate({ roleId: selectedRole.admin_role_id, deptId });
+    try {
+      await Promise.all([refetchRoles(), refetchDepartments()]);
+      if (searchQuery.trim()) {
+        await refetchSearch();
+      }
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  const handleRemoveDepartment = (deptId: string) => {
-    if (selectedRole) {
-      removeDepartmentMutation.mutate({ roleId: selectedRole.admin_role_id, deptId });
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      refetchSearch();
     }
   };
 
-  // Helper functions
-  const getRoleIcon = (roleType: number) => {
-    switch (roleType) {
-      case 1: return 'account';
-      case 2: return 'account-tie';
-      case 4: return 'shield-crown';
-      default: return 'account';
-    }
+  const filterRolesByType = (roles: Role[]) => {
+    if (selectedRoleType === 'all') return roles;
+    if (selectedRoleType === 'employee') return roles.filter(r => r.role_type === 1);
+    if (selectedRoleType === 'manager') return roles.filter(r => r.role_type === 2);
+    if (selectedRoleType === 'super_admin') return roles.filter(r => r.role_type === 4);
+    return roles;
   };
 
-  const getRoleColor = (roleType: number) => {
-    switch (roleType) {
-      case 1: return '#C084FC'; // Employee
-      case 2: return '#A855F7'; // Manager
-      case 4: return '#9333EA'; // Super Admin
-      default: return '#64748B';
-    }
-  };
+  const rolesToDisplay = searchQuery.trim() && searchResults?.data?.roles
+    ? filterRolesByType(searchResults.data.roles)
+    : filterRolesByType(rolesData?.data?.roles || []);
 
-  const getRoleTypeText = (roleType: number) => {
-    switch (roleType) {
-      case 1: return 'Employee';
-      case 2: return 'Manager';
-      case 4: return 'Super Admin';
-      default: return 'Unknown';
-    }
-  };
+  const totalRoles = rolesData?.data?.roles?.length || 0;
+  const employeeRoles = rolesData?.data?.roles?.filter(r => r.role_type === 1).length || 0;
+  const managerRoles = rolesData?.data?.roles?.filter(r => r.role_type === 2).length || 0;
+  const superAdminRoles = rolesData?.data?.roles?.filter(r => r.role_type === 4).length || 0;
+  const systemRoles = rolesData?.data?.roles?.filter(r => r.is_system_role).length || 0;
 
-  const getPermissionCountByModule = (moduleCode: string) => {
-    if (!detailsData?.data?.permissions) return 0;
-    return detailsData.data.permissions.filter((p: Permission) => p.module === moduleCode).length;
-  };
-
-  // Filter admin's accessible departments
-  const accessibleDepartments = adminDepartmentsData?.data?.departments || [];
-  const accessibleDepartmentIds = accessibleDepartments.map((dept: Department) => dept.system_department_id);
+  const renderRoleItem = ({ item }: RoleListItem) => (
+    <View style={[styles.roleCard, isTablet && styles.roleCardTablet]}>
+      <View style={styles.roleHeader}>
+        <View style={[
+          styles.roleIconContainer,
+          item.role_type === 1 && styles.employeeIconContainer,
+          item.role_type === 2 && styles.managerIconContainer,
+          item.role_type === 4 && styles.superAdminIconContainer,
+        ]}>
+          <MaterialCommunityIcons
+            name={
+              item.role_type === 1 ? "account" :
+              item.role_type === 2 ? "account-tie" :
+              "shield-account"
+            }
+            size={isTablet ? 28 : 24}
+            color={
+              item.role_type === 1 ? "#C084FC" :
+              item.role_type === 2 ? "#8B5CF6" :
+              "#10B981"
+            }
+          />
+        </View>
+        <View style={styles.roleInfo}>
+          <View style={styles.roleTitleRow}>
+            <Text style={[styles.roleName, isTablet && styles.roleNameTablet]}>{item.role_name}</Text>
+            {item.is_system_role && (
+              <View style={styles.systemBadge}>
+                <MaterialCommunityIcons name="shield-check" size={12} color="#FFFFFF" />
+                <Text style={styles.systemBadgeText}>System</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.roleDescription} numberOfLines={2}>
+            {item.description || 'No description'}
+          </Text>
+          <View style={styles.roleMeta}>
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons name="layers" size={12} color="#64748B" />
+              <Text style={styles.metaText}>
+                {item.role_type === 1 ? 'Employee' :
+                 item.role_type === 2 ? 'Manager' :
+                 'Super Admin'}
+              </Text>
+            </View>
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons name="chart-line" size={12} color="#64748B" />
+              <Text style={styles.metaText}>Level {item.role_level}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons name="calendar" size={12} color="#64748B" />
+              <Text style={styles.metaText}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+      <View style={styles.roleActions}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.viewButton]}
+          onPress={() => handleRoleClick(item)}
+          disabled={loadingRoleDetails}
+        >
+          <MaterialCommunityIcons name="eye" size={16} color="#64748B" />
+          <Text style={styles.actionButtonText}>View</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.editButton]}
+          onPress={() => handleEditRole(item)}
+          disabled={item.is_system_role}
+        >
+          <MaterialCommunityIcons name="pencil" size={16} color="#64748B" />
+          <Text style={styles.actionButtonText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={() => handleDeleteRole(item)}
+          disabled={item.is_system_role || deleteRoleMutation.isPending}
+        >
+          <MaterialCommunityIcons name="delete" size={16} color="#EF4444" />
+          <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={[styles.header, isTablet && styles.headerTablet]}>
         <View style={isTablet && styles.headerContentTablet}>
           <Text style={[styles.title, isTablet && styles.titleTablet]}>Company Role Management</Text>
           <Text style={[styles.subtitle, isTablet && styles.subtitleTablet]}>
-            Manage all roles, departments, and permissions across the company
+            Manage all roles and permissions • {totalRoles} total roles
           </Text>
-        </View>
-        
-        <View style={[styles.statsContainer, isTablet && styles.statsContainerTablet]}>
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons name="account-group" size={isTablet ? 20 : 16} color="#64748B" />
-            <Text style={[styles.statText, isTablet && styles.statTextTablet]}>
-              {rolesData?.data?.meta?.total || 0} Total Roles
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <MaterialCommunityIcons name="shield-account" size={isTablet ? 20 : 16} color="#64748B" />
-            <Text style={[styles.statText, isTablet && styles.statTextTablet]}>
-              {rolesData?.data?.roles?.filter((r: Role) => r.role_type === 4)?.length || 0} Super Admins
-            </Text>
-          </View>
         </View>
       </View>
 
       {/* Search Bar */}
       <View style={[styles.searchContainer, isTablet && styles.searchContainerTablet]}>
-        <MaterialCommunityIcons name="magnify" size={isTablet ? 24 : 20} color="#64748B" />
+        <MaterialCommunityIcons name="magnify" size={20} color="#64748B" />
         <TextInput
           style={[styles.searchInput, isTablet && styles.searchInputTablet]}
-          placeholder="Search roles by name or type..."
+          placeholder="Search roles by name or description..."
+          placeholderTextColor="#94A3B8"
           value={searchQuery}
           onChangeText={setSearchQuery}
           onSubmitEditing={handleSearch}
-          placeholderTextColor="#94A3B8"
           returnKeyType="search"
         />
-        <TouchableOpacity onPress={handleSearch} style={[styles.searchButton, isTablet && styles.searchButtonTablet]}>
-          <MaterialCommunityIcons name="magnify" size={isTablet ? 24 : 20} color="#FFFFFF" />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <MaterialCommunityIcons name="close-circle" size={20} color="#94A3B8" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Stats Bar */}
+      <View style={[styles.statsContainer, isTablet && styles.statsContainerTablet]}>
+        <TouchableOpacity
+          style={[styles.statItem, selectedRoleType === 'all' && styles.statItemSelected]}
+          onPress={() => setSelectedRoleType('all')}
+        >
+          <MaterialCommunityIcons name="layers" size={16} color={selectedRoleType === 'all' ? '#8B5CF6' : '#64748B'} />
+          <Text style={[styles.statCount, selectedRoleType === 'all' && styles.statCountSelected]}>
+            {totalRoles}
+          </Text>
+          <Text style={[styles.statLabel, selectedRoleType === 'all' && styles.statLabelSelected]}>
+            All
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.statItem, selectedRoleType === 'employee' && styles.statItemSelected]}
+          onPress={() => setSelectedRoleType('employee')}
+        >
+          <MaterialCommunityIcons name="account" size={16} color={selectedRoleType === 'employee' ? '#C084FC' : '#64748B'} />
+          <Text style={[styles.statCount, selectedRoleType === 'employee' && styles.statCountSelected]}>
+            {employeeRoles}
+          </Text>
+          <Text style={[styles.statLabel, selectedRoleType === 'employee' && styles.statLabelSelected]}>
+            Employee
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.statItem, selectedRoleType === 'manager' && styles.statItemSelected]}
+          onPress={() => setSelectedRoleType('manager')}
+        >
+          <MaterialCommunityIcons name="account-tie" size={16} color={selectedRoleType === 'manager' ? '#8B5CF6' : '#64748B'} />
+          <Text style={[styles.statCount, selectedRoleType === 'manager' && styles.statCountSelected]}>
+            {managerRoles}
+          </Text>
+          <Text style={[styles.statLabel, selectedRoleType === 'manager' && styles.statLabelSelected]}>
+            Manager
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.statItem, selectedRoleType === 'super_admin' && styles.statItemSelected]}
+          onPress={() => setSelectedRoleType('super_admin')}
+        >
+          <MaterialCommunityIcons name="shield-account" size={16} color={selectedRoleType === 'super_admin' ? '#10B981' : '#64748B'} />
+          <Text style={[styles.statCount, selectedRoleType === 'super_admin' && styles.statCountSelected]}>
+            {superAdminRoles}
+          </Text>
+          <Text style={[styles.statLabel, selectedRoleType === 'super_admin' && styles.statLabelSelected]}>
+            Super Admin
+          </Text>
         </TouchableOpacity>
       </View>
 
       {/* Roles List */}
       <FlatList
-        data={rolesData?.data?.roles || []}
-        keyExtractor={(item) => item.admin_role_id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        data={rolesToDisplay}
+        renderItem={renderRoleItem}
+        keyExtractor={(item: Role) => item.admin_role_id}
+        contentContainerStyle={[
+          styles.rolesList,
+          isTablet && styles.rolesListTablet,
+          rolesToDisplay.length === 0 && styles.emptyListContainer,
+        ]}
+        numColumns={isTablet ? 2 : 1}
+        columnWrapperStyle={isTablet && styles.rolesGridTablet}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#9333EA']}
-            tintColor="#9333EA"
+            onRefresh={onRefresh}
+            colors={['#8B5CF6']}
+            tintColor="#8B5CF6"
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="domain" size={isTablet ? 80 : 64} color="#CBD5E1" />
-            <Text style={[styles.emptyText, isTablet && styles.emptyTextTablet]}>No roles found</Text>
-            <Text style={[styles.emptySubtext, isTablet && styles.emptySubtextTablet]}>
-              Create roles from Employee or Manager management
-            </Text>
-          </View>
-        }
-        ListHeaderComponent={
           isLoadingRoles ? (
-            <ActivityIndicator size="large" color="#9333EA" style={styles.loader} />
+            <ActivityIndicator size="large" color="#8B5CF6" style={styles.loader} />
           ) : rolesError ? (
             <View style={styles.errorContainer}>
-              <MaterialCommunityIcons name="alert-circle" size={isTablet ? 64 : 48} color="#EF4444" />
-              <Text style={[styles.errorText, isTablet && styles.errorTextTablet]}>Failed to load roles</Text>
-              <TouchableOpacity style={[styles.retryButton, isTablet && styles.retryButtonTablet]} onPress={() => refetchRoles()}>
-                <Text style={[styles.retryButtonText, isTablet && styles.retryButtonTextTablet]}>Retry</Text>
+              <MaterialCommunityIcons name="alert-circle-outline" size={isTablet ? 80 : 64} color="#EF4444" />
+              <Text style={[styles.errorText, isTablet && styles.errorTextTablet]}>
+                Failed to load roles
+              </Text>
+              <Text style={[styles.errorSubtext, isTablet && styles.errorSubtextTablet]}>
+                {(rolesError as Error).message || 'Please try again'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.retryButton, isTablet && styles.retryButtonTablet]}
+                onPress={() => refetchRoles()}
+              >
+                <MaterialCommunityIcons name="reload" size={20} color="#FFFFFF" />
+                <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>
-          ) : null
-        }
-        numColumns={isTablet ? 2 : 1}
-        renderItem={({ item: role }) => {
-          const roleColor = getRoleColor(role.role_type);
-          
-          return (
-            <TouchableOpacity
-              style={[styles.roleCard, isTablet && styles.roleCardTablet]}
-              onPress={() => handleViewDetails(role)}
-            >
-              <View style={styles.roleCardHeader}>
-                <View style={[styles.roleIconContainer, { backgroundColor: `${roleColor}15` }]}>
-                  <MaterialCommunityIcons
-                    name={getRoleIcon(role.role_type)}
-                    size={isTablet ? 28 : 24}
-                    color={roleColor}
-                  />
-                </View>
-                
-                <View style={styles.roleInfo}>
-                  <Text style={[styles.roleName, isTablet && styles.roleNameTablet]}>{role.role_name}</Text>
-                  <View style={styles.roleMeta}>
-                    <View style={[styles.roleTypeBadge, { backgroundColor: `${roleColor}15` }]}>
-                      <Text style={[styles.roleTypeText, { color: roleColor }, isTablet && styles.roleTypeTextTablet]}>
-                        {getRoleTypeText(role.role_type)}
-                      </Text>
-                    </View>
-                    {role.is_system_role && (
-                      <View style={styles.systemBadge}>
-                        <Text style={[styles.systemBadgeText, isTablet && styles.systemBadgeTextTablet]}>System</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-              
-              <Text style={[styles.roleDescription, isTablet && styles.roleDescriptionTablet]} numberOfLines={2}>
-                {role.description}
+          ) : (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="shield-account-outline" size={isTablet ? 100 : 80} color="#CBD5E1" />
+              <Text style={[styles.emptyText, isTablet && styles.emptyTextTablet]}>
+                No roles found
               </Text>
-              
-              <View style={styles.roleCardFooter}>
-                <Text style={[styles.roleLevel, isTablet && styles.roleLevelTablet]}>Level {role.role_level}</Text>
-                <Text style={[styles.roleDate, isTablet && styles.roleDateTablet]}>
-                  {new Date(role.created_at).toLocaleDateString()}
-                </Text>
-              </View>
-              
-              <View style={styles.actionButtons}>
-                <TouchableOpacity 
-                  style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
-                  onPress={() => handleEditRole(role)}
-                >
-                  <MaterialCommunityIcons name="pencil" size={isTablet ? 20 : 16} color="#64748B" />
-                  <Text style={[styles.actionButtonText, isTablet && styles.actionButtonTextTablet]}>Edit</Text>
-                </TouchableOpacity>
-                
+              <Text style={[styles.emptySubtext, isTablet && styles.emptySubtextTablet]}>
+                {searchQuery ? 'Try a different search term' : 'Create your first role'}
+              </Text>
+              {!searchQuery && (
                 <TouchableOpacity
-                  style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
-                  onPress={() => handleManageDepartments(role)}
+                  style={[styles.emptyActionButton, isTablet && styles.emptyActionButtonTablet]}
+                  onPress={() => setCreateModalVisible(true)}
                 >
-                  <MaterialCommunityIcons name="office-building" size={isTablet ? 20 : 16} color="#64748B" />
-                  <Text style={[styles.actionButtonText, isTablet && styles.actionButtonTextTablet]}>Departments</Text>
+                  <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
+                  <Text style={styles.emptyActionButtonText}>Create Role</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionButton, isTablet && styles.actionButtonTablet]}
-                  onPress={() => handleViewPermissions(role)}
-                >
-                  <MaterialCommunityIcons name="shield-key" size={isTablet ? 20 : 16} color="#64748B" />
-                  <Text style={[styles.actionButtonText, isTablet && styles.actionButtonTextTablet]}>Permissions</Text>
-                </TouchableOpacity>
-                
-                {!role.is_system_role && (
-                  <TouchableOpacity
-                    style={[styles.deleteButton, isTablet && styles.deleteButtonTablet]}
-                    onPress={() => {
-                      setSelectedRole(role);
-                      setDeleteModalVisible(true);
-                    }}
-                  >
-                    <MaterialCommunityIcons name="trash-can" size={isTablet ? 20 : 16} color="#EF4444" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        }}
+              )}
+            </View>
+          )
+        }
+        showsVerticalScrollIndicator={false}
       />
 
-      {/* Role Details Modal */}
-      <Modal
-        visible={isDetailsModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setDetailsModalVisible(false)}
-        statusBarTranslucent={true}
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, isTablet && styles.fabTablet]}
+        onPress={() => setCreateModalVisible(true)}
       >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, isTablet && styles.modalContentTablet]}>
-            {selectedRole && (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalRoleInfo}>
-                    <View style={[
-                      styles.modalRoleIcon,
-                      { backgroundColor: `${getRoleColor(selectedRole.role_type)}15` }
-                    ]}>
-                      <MaterialCommunityIcons
-                        name={getRoleIcon(selectedRole.role_type)}
-                        size={isTablet ? 40 : 32}
-                        color={getRoleColor(selectedRole.role_type)}
-                      />
-                    </View>
-                    <View style={styles.modalRoleTextContainer}>
-                      <Text style={[styles.modalRoleName, isTablet && styles.modalRoleNameTablet]}>
-                        {selectedRole.role_name}
-                      </Text>
-                      <Text style={[styles.modalRoleType, isTablet && styles.modalRoleTypeTablet]}>
-                        {getRoleTypeText(selectedRole.role_type)} Role
-                      </Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
-                    <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
-                  </TouchableOpacity>
-                </View>
+        <MaterialCommunityIcons name="plus" size={isTablet ? 28 : 24} color="#FFFFFF" />
+      </TouchableOpacity>
 
-                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                  <View style={styles.detailSection}>
-                    <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Description</Text>
-                    <Text style={[styles.detailValue, isTablet && styles.detailValueTablet]}>
-                      {selectedRole.description}
-                    </Text>
-                  </View>
+      {/* Modals */}
+      <CreateRoleModal
+        visible={isCreateModalVisible}
+        onClose={() => setCreateModalVisible(false)}
+        onSave={handleCreateRole}
+        isCreating={createEmployeeRoleMutation.isPending || createManagerRoleMutation.isPending}
+        availableDepartments={availableDepartments}
+      />
 
-                  <View style={[styles.detailRow, isTablet && styles.detailRowTablet]}>
-                    <View style={styles.detailItem}>
-                      <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Role Level</Text>
-                      <Text style={[styles.detailValue, isTablet && styles.detailValueTablet]}>
-                        {selectedRole.role_level}
-                      </Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>System Role</Text>
-                      <Text style={[styles.detailValue, isTablet && styles.detailValueTablet]}>
-                        {selectedRole.is_system_role ? 'Yes' : 'No'}
-                      </Text>
-                    </View>
-                  </View>
+      <UpdateRoleModal
+        visible={isUpdateModalVisible}
+        onClose={() => {
+          setIsUpdateModalVisible(false);
+          setSelectedRole(null);
+        }}
+        role={selectedRole}
+        onUpdate={handleUpdateRole}
+        isUpdating={updateRoleMutation.isPending}
+      />
 
-                  <View style={[styles.detailRow, isTablet && styles.detailRowTablet]}>
-                    <View style={styles.detailItem}>
-                      <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Created</Text>
-                      <Text style={[styles.detailValue, isTablet && styles.detailValueTablet]}>
-                        {new Date(selectedRole.created_at).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Last Updated</Text>
-                      <Text style={[styles.detailValue, isTablet && styles.detailValueTablet]}>
-                        {new Date(selectedRole.updated_at).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Departments Section */}
-                  {detailsData && detailsData.data && (
-                    <View style={styles.detailSection}>
-                      <View style={styles.sectionHeader}>
-                        <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Departments</Text>
-                        <Text style={styles.sectionCount}>
-                          {detailsData.data.departments?.length || 0} available
-                        </Text>
-                      </View>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsContainer}>
-                        {detailsData.data.departments?.slice(0, 5).map((dept: Department) => (
-                          <View key={dept.system_department_id} style={styles.chip}>
-                            <Text style={styles.chipText}>{dept.name}</Text>
-                          </View>
-                        ))}
-                        {detailsData.data.departments && detailsData.data.departments.length > 5 && (
-                          <View style={styles.chip}>
-                            <Text style={styles.chipText}>+{detailsData.data.departments.length - 5} more</Text>
-                          </View>
-                        )}
-                      </ScrollView>
-                    </View>
-                  )}
-
-                  {/* Permissions Section */}
-                  {detailsData && detailsData.data && (
-                    <View style={styles.detailSection}>
-                      <View style={styles.sectionHeader}>
-                        <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Permissions</Text>
-                        <Text style={styles.sectionCount}>
-                          {detailsData.data.permissions?.length || 0} available
-                        </Text>
-                      </View>
-                      <Text style={[styles.detailValue, isTablet && styles.detailValueTablet]}>
-                        View all permissions in the permissions modal
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.detailSection}>
-                    <Text style={[styles.detailLabel, isTablet && styles.detailLabelTablet]}>Role ID</Text>
-                    <Text style={[styles.detailValue, styles.roleIdText, isTablet && styles.roleIdTextTablet]}>
-                      {selectedRole.admin_role_id}
-                    </Text>
-                  </View>
-                </ScrollView>
-
-                <View style={styles.modalFooter}>
-                  <TouchableOpacity
-                    style={[styles.modalActionButton, isTablet && styles.modalActionButtonTablet]}
-                    onPress={() => {
-                      setDetailsModalVisible(false);
-                      handleManageDepartments(selectedRole);
-                    }}
-                  >
-                    <MaterialCommunityIcons name="office-building" size={20} color="#9333EA" />
-                    <Text style={[styles.modalActionButtonText, isTablet && styles.modalActionButtonTextTablet]}>
-                      Manage Departments
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.closeModalButton, isTablet && styles.closeModalButtonTablet]}
-                    onPress={() => setDetailsModalVisible(false)}
-                  >
-                    <Text style={[styles.closeModalButtonText, isTablet && styles.closeModalButtonTextTablet]}>
-                      Close
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Role Modal */}
-      <Modal
-        visible={isEditModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setEditModalVisible(false)}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, isTablet && styles.modalContentTablet]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isTablet && styles.modalTitleTablet]}>Edit Role</Text>
-              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, isTablet && styles.formLabelTablet]}>Role Name</Text>
-                <TextInput
-                  style={[styles.formInput, isTablet && styles.formInputTablet]}
-                  value={editForm.role_name}
-                  onChangeText={(text) => setEditForm({...editForm, role_name: text})}
-                  placeholder="Enter role name"
-                  placeholderTextColor="#94A3B8"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, isTablet && styles.formLabelTablet]}>Description</Text>
-                <TextInput
-                  style={[styles.formInput, styles.textArea, isTablet && styles.formInputTablet]}
-                  value={editForm.description}
-                  onChangeText={(text) => setEditForm({...editForm, description: text})}
-                  placeholder="Enter role description"
-                  placeholderTextColor="#94A3B8"
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, isTablet && styles.formLabelTablet]}>Add Departments</Text>
-                <Text style={[styles.formHelpText, isTablet && styles.formHelpTextTablet]}>
-                  Enter department names separated by commas
-                </Text>
-                <TextInput
-                  style={[styles.formInput, isTablet && styles.formInputTablet]}
-                  value={editForm.add_departments.join(', ')}
-                  onChangeText={(text) => setEditForm({...editForm, add_departments: text.split(',').map(d => d.trim()).filter(d => d)})}
-                  placeholder="HR, Sales, Marketing"
-                  placeholderTextColor="#94A3B8"
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, isTablet && styles.formLabelTablet]}>Remove Departments</Text>
-                <Text style={[styles.formHelpText, isTablet && styles.formHelpTextTablet]}>
-                  Enter department names to remove
-                </Text>
-                <TextInput
-                  style={[styles.formInput, isTablet && styles.formInputTablet]}
-                  value={editForm.remove_departments.join(', ')}
-                  onChangeText={(text) => setEditForm({...editForm, remove_departments: text.split(',').map(d => d.trim()).filter(d => d)})}
-                  placeholder="Operations, Logistics"
-                  placeholderTextColor="#94A3B8"
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.closeModalButton, isTablet && styles.closeModalButtonTablet]}
-                onPress={() => setEditModalVisible(false)}
-              >
-                <Text style={[styles.closeModalButtonText, isTablet && styles.closeModalButtonTextTablet]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveButton, isTablet && styles.saveButtonTablet]}
-                onPress={handleUpdateRole}
-                disabled={updateRoleMutation.isPending}
-              >
-                {updateRoleMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={[styles.saveButtonText, isTablet && styles.saveButtonTextTablet]}>
-                    Save Changes
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Department Management Modal */}
-      <Modal
-        visible={isDepartmentModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setDepartmentModalVisible(false)}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, isTablet && styles.modalContentTablet, { maxHeight: height * 0.8 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isTablet && styles.modalTitleTablet]}>
-                Manage Departments - {selectedRole?.role_name}
-              </Text>
-              <TouchableOpacity onPress={() => setDepartmentModalVisible(false)}>
-                <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.modalSubtitle, isTablet && styles.modalSubtitleTablet]}>
-                Current Departments ({roleDepartmentsData?.data?.length || 0})
-              </Text>
-              
-              {roleDepartmentsData?.data && roleDepartmentsData.data.length > 0 ? (
-                <View style={styles.departmentList}>
-                  {roleDepartmentsData.data.map((dept: Department) => (
-                    <View key={dept.system_department_id} style={styles.departmentItem}>
-                      <View style={styles.departmentInfo}>
-                        <MaterialCommunityIcons name="office-building" size={20} color="#9333EA" />
-                        <View style={styles.departmentText}>
-                          <Text style={[styles.departmentName, isTablet && styles.departmentNameTablet]}>
-                            {dept.name}
-                          </Text>
-                          <Text style={[styles.departmentModule, isTablet && styles.departmentModuleTablet]}>
-                            {dept.module_code}
-                          </Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.removeButton}
-                        onPress={() => handleRemoveDepartment(dept.system_department_id)}
-                        disabled={removeDepartmentMutation.isPending}
-                      >
-                        <MaterialCommunityIcons name="minus-circle" size={20} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={[styles.noDataText, isTablet && styles.noDataTextTablet]}>
-                  No departments assigned to this role
-                </Text>
-              )}
-
-              <Text style={[styles.modalSubtitle, isTablet && styles.modalSubtitleTablet, { marginTop: 24 }]}>
-                Available Departments ({accessibleDepartments.length})
-              </Text>
-              
-              {accessibleDepartments.length > 0 ? (
-                <View style={styles.departmentList}>
-                  {accessibleDepartments.map((dept: Department) => {
-                    const isAssigned = roleDepartmentsData?.data?.some(
-                      (assignedDept: Department) => assignedDept.system_department_id === dept.system_department_id
-                    );
-                    
-                    if (isAssigned) return null;
-                    
-                    return (
-                      <View key={dept.system_department_id} style={styles.departmentItem}>
-                        <View style={styles.departmentInfo}>
-                          <MaterialCommunityIcons name="office-building-outline" size={20} color="#64748B" />
-                          <View style={styles.departmentText}>
-                            <Text style={[styles.departmentName, isTablet && styles.departmentNameTablet]}>
-                              {dept.name}
-                            </Text>
-                            <Text style={[styles.departmentModule, isTablet && styles.departmentModuleTablet]}>
-                              {dept.module_code}
-                            </Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.addButton}
-                          onPress={() => handleAssignDepartment(dept.system_department_id)}
-                          disabled={assignDepartmentMutation.isPending}
-                        >
-                          <MaterialCommunityIcons name="plus-circle" size={20} color="#10B981" />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={[styles.noDataText, isTablet && styles.noDataTextTablet]}>
-                  No available departments
-                </Text>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.closeModalButton, isTablet && styles.closeModalButtonTablet]}
-                onPress={() => setDepartmentModalVisible(false)}
-              >
-                <Text style={[styles.closeModalButtonText, isTablet && styles.closeModalButtonTextTablet]}>
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Permissions Modal */}
-      <Modal
-        visible={isPermissionsModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setPermissionsModalVisible(false)}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, isTablet && styles.modalContentTablet, { maxHeight: height * 0.8 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, isTablet && styles.modalTitleTablet]}>
-                Permissions - {selectedRole?.role_name}
-              </Text>
-              <TouchableOpacity onPress={() => setPermissionsModalVisible(false)}>
-                <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              {isLoadingDetails ? (
-                <ActivityIndicator size="large" color="#9333EA" style={styles.loader} />
-              ) : detailsData?.data ? (
-                <View>
-                  {Array.from(new Set(detailsData.data.permissions?.map((p: Permission) => p.module) || [])).map((module) => (
-                    <View key={module as string} style={styles.permissionSection}>
-                      <View style={styles.permissionSectionHeader}>
-                        <Text style={[styles.permissionModuleName, isTablet && styles.permissionModuleNameTablet]}>
-                          {(module as string).charAt(0).toUpperCase() + (module as string).slice(1)}
-                        </Text>
-                        <Text style={styles.permissionCount}>
-                          {detailsData.data.permissions?.filter((p: Permission) => p.module === module).length || 0} permissions
-                        </Text>
-                      </View>
-                      
-                      <View style={styles.permissionGrid}>
-                        {detailsData.data.permissions
-                          ?.filter((p: Permission) => p.module === module)
-                          .slice(0, 5)
-                          .map((permission: Permission) => (
-                            <View key={permission.permission_id} style={styles.permissionChip}>
-                              <MaterialCommunityIcons name="shield-key" size={16} color="#9333EA" />
-                              <Text style={[styles.permissionName, isTablet && styles.permissionNameTablet]}>
-                                {permission.permission_name}
-                              </Text>
-                            </View>
-                          ))}
-                        
-                        {detailsData.data.permissions?.filter((p: Permission) => p.module === module).length > 5 && (
-                          <View style={styles.moreChip}>
-                            <Text style={styles.moreChipText}>
-                              +{detailsData.data.permissions.filter((p: Permission) => p.module === module).length - 5} more
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={[styles.noDataText, isTablet && styles.noDataTextTablet]}>
-                  No permissions data available
-                </Text>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.closeModalButton, isTablet && styles.closeModalButtonTablet]}
-                onPress={() => setPermissionsModalVisible(false)}
-              >
-                <Text style={[styles.closeModalButtonText, isTablet && styles.closeModalButtonTextTablet]}>
-                  Close
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        visible={isDeleteModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setDeleteModalVisible(false)}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.deleteModalContainer}>
-          <View style={[styles.deleteModalContent, isTablet && styles.deleteModalContentTablet]}>
-            <View style={styles.deleteModalIcon}>
-              <MaterialCommunityIcons name="alert-circle" size={isTablet ? 64 : 48} color="#EF4444" />
-            </View>
-            
-            <Text style={[styles.deleteModalTitle, isTablet && styles.deleteModalTitleTablet]}>Delete Role</Text>
-            
-            <Text style={[styles.deleteModalText, isTablet && styles.deleteModalTextTablet]}>
-              Are you sure you want to delete "{selectedRole?.role_name}"? 
-              This action cannot be undone.
-            </Text>
-
-            {selectedRole?.is_system_role && (
-              <View style={styles.warningBox}>
-                <MaterialCommunityIcons name="alert" size={20} color="#D97706" />
-                <Text style={styles.warningText}>System roles cannot be deleted</Text>
-              </View>
-            )}
-
-            <View style={[styles.deleteModalButtons, isTablet && styles.deleteModalButtonsTablet]}>
-              <TouchableOpacity
-                style={[styles.deleteCancelButton, isTablet && styles.deleteCancelButtonTablet]}
-                onPress={() => setDeleteModalVisible(false)}
-              >
-                <Text style={[styles.deleteCancelButtonText, isTablet && styles.deleteCancelButtonTextTablet]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              
-              {!selectedRole?.is_system_role && (
-                <TouchableOpacity
-                  style={[
-                    styles.deleteConfirmButton,
-                    isTablet && styles.deleteConfirmButtonTablet,
-                    deleteRoleMutation.isPending && styles.deleteConfirmButtonDisabled,
-                  ]}
-                  onPress={handleDeleteRole}
-                  disabled={deleteRoleMutation.isPending}
-                >
-                  {deleteRoleMutation.isPending ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={[styles.deleteConfirmButtonText, isTablet && styles.deleteConfirmButtonTextTablet]}>
-                      Delete
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </View>
+      <RoleDetailsModal
+        visible={isRoleDetailsModalVisible}
+        onClose={() => {
+          setIsRoleDetailsModalVisible(false);
+          setSelectedRoleDetails(null);
+        }}
+        roleDetails={selectedRoleDetails}
+        isLoading={loadingRoleDetails}
+      />
+    </SafeAreaView>
   );
 };
 
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 8 : 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   headerTablet: {
     paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingTop: Platform.OS === 'ios' ? 12 : 20,
     paddingBottom: 16,
   },
   headerContentTablet: {
@@ -986,113 +1679,307 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 4,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 8,
-  },
-  statsContainerTablet: {
-    marginTop: 12,
-    gap: 16,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statText: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  statTextTablet: {
-    fontSize: 14,
-  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     margin: 16,
     paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   searchContainerTablet: {
     margin: 24,
     paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 12,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
+    marginLeft: 8,
+    marginRight: 8,
     fontSize: 14,
     color: '#1E293B',
-    marginLeft: 8,
+    padding: 0,
   },
   searchInputTablet: {
-    paddingVertical: 12,
+    marginLeft: 12,
+    marginRight: 12,
     fontSize: 16,
-    marginLeft: 12,
   },
-  searchButton: {
-    backgroundColor: '#9333EA',
-    padding: 8,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
-  searchButtonTablet: {
-    padding: 10,
+  statsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
     borderRadius: 8,
-    marginLeft: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  listContent: {
+  statsContainerTablet: {
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 12,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  statItemSelected: {
+    backgroundColor: '#F5F3FF',
+  },
+  statCount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginTop: 4,
+  },
+  statCountSelected: {
+    color: '#8B5CF6',
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
+    textTransform: 'uppercase',
+    fontWeight: '500',
+  },
+  statLabelSelected: {
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  rolesList: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 100,
+  },
+  rolesListTablet: {
+    paddingHorizontal: 24,
+  },
+  emptyListContainer: {
+    flexGrow: 1,
+  },
+  rolesGridTablet: {
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  roleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  roleCardTablet: {
+    flex: 1,
+    minWidth: '48%',
+    marginBottom: 16,
+  },
+  roleHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  roleIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  employeeIconContainer: {
+    backgroundColor: '#FAF5FF',
+  },
+  managerIconContainer: {
+    backgroundColor: '#F5F3FF',
+  },
+  superAdminIconContainer: {
+    backgroundColor: '#D1FAE5',
+  },
+  roleInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  roleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  roleName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginRight: 8,
+  },
+  roleNameTablet: {
+    fontSize: 18,
+  },
+  systemBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  systemBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  roleDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  roleMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  roleActions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  viewButton: {
+    backgroundColor: '#F1F5F9',
+  },
+  editButton: {
+    backgroundColor: '#F1F5F9',
+  },
+  deleteButton: {
+    backgroundColor: '#FEF2F2',
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  deleteButtonText: {
+    color: '#EF4444',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#8B5CF6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  fabTablet: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    bottom: 24,
+    right: 24,
   },
   loader: {
-    marginTop: 40,
+    marginTop: 60,
   },
   errorContainer: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 60,
     padding: 16,
   },
   errorText: {
-    fontSize: 14,
-    color: '#EF4444',
-    marginTop: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginTop: 12,
     textAlign: 'center',
   },
   errorTextTablet: {
-    fontSize: 18,
-    marginTop: 12,
+    fontSize: 20,
+    marginTop: 16,
+  },
+  errorSubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  errorSubtextTablet: {
+    fontSize: 14,
+    marginTop: 6,
   },
   retryButton: {
-    backgroundColor: '#9333EA',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 8,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 16,
   },
   retryButtonTablet: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
-    marginTop: 16,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
   },
-  retryButtonTextTablet: {
-    fontSize: 14,
-  },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
+    marginTop: 60,
+    padding: 16,
   },
   emptyText: {
     fontSize: 16,
@@ -1114,482 +2001,522 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 6,
   },
-  roleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  roleCardTablet: {
-    width: '48%',
-    marginHorizontal: '1%',
-    marginBottom: 16,
-  },
-  roleCardHeader: {
+  emptyActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  roleIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  roleInfo: {
-    flex: 1,
-  },
-  roleName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1E293B',
-    marginBottom: 4,
-  },
-  roleNameTablet: {
-    fontSize: 18,
-  },
-  roleMeta: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  roleTypeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  roleTypeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  roleTypeTextTablet: {
-    fontSize: 12,
-  },
-  systemBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  systemBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#D97706',
-  },
-  systemBadgeTextTablet: {
-    fontSize: 11,
-  },
-  roleDescription: {
-    fontSize: 12,
-    color: '#64748B',
-    lineHeight: 16,
-    marginBottom: 12,
-  },
-  roleDescriptionTablet: {
-    fontSize: 14,
-    lineHeight: 18,
-    marginBottom: 16,
-  },
-  roleCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    marginBottom: 12,
-  },
-  roleLevel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  roleLevelTablet: {
-    fontSize: 12,
-  },
-  roleDate: {
-    fontSize: 11,
-    color: '#94A3B8',
-  },
-  roleDateTablet: {
-    fontSize: 12,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 8,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-  },
-  actionButtonTablet: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
+    gap: 6,
+    marginTop: 16,
   },
-  actionButtonText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#64748B',
+  emptyActionButtonTablet: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
-  actionButtonTextTablet: {
+  emptyActionButtonText: {
+    color: '#FFFFFF',
     fontSize: 12,
+    fontWeight: '600',
   },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 6,
-    backgroundColor: '#FEF2F2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButtonTablet: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-  },
-  // Modal Styles
-  modalContainer: {
+  createModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
+  createModalContent: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: height * 0.85,
-  },
-  modalContentTablet: {
     maxHeight: height * 0.9,
-    marginHorizontal: 'auto',
-    width: isTablet ? '70%' : '100%',
+  },
+  createModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    alignSelf: 'center',
   },
-  modalHeader: {
+  createModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  modalTitle: {
+  createModalTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#1E293B',
   },
-  modalTitleTablet: {
-    fontSize: 22,
+  createModalTitleTablet: {
+    fontSize: 24,
   },
-  modalSubtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 12,
-  },
-  modalSubtitleTablet: {
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  modalRoleInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  modalRoleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalRoleTextContainer: {
-    flex: 1,
-  },
-  modalRoleName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  modalRoleNameTablet: {
-    fontSize: 22,
-  },
-  modalRoleType: {
+  createModalSubtitle: {
     fontSize: 12,
     color: '#64748B',
     marginTop: 2,
   },
-  modalRoleTypeTablet: {
+  createModalSubtitleTablet: {
     fontSize: 14,
     marginTop: 4,
   },
-  modalBody: {
+  createModalBody: {
     padding: 20,
+    maxHeight: height * 0.7,
   },
-  detailSection: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
+  createModalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionCount: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 12,
-  },
-  detailRowTablet: {
-    gap: 16,
-    marginBottom: 20,
-  },
-  detailItem: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
-    marginBottom: 4,
-  },
-  detailLabelTablet: {
-    fontSize: 14,
-    marginBottom: 6,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: '#1E293B',
-  },
-  detailValueTablet: {
-    fontSize: 16,
-  },
-  chipsContainer: {
-    flexDirection: 'row',
-    marginTop: 8,
-  },
-  chip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  chipText: {
-    fontSize: 12,
-    color: '#475569',
-  },
-  roleIdText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  roleIdTextTablet: {
-    fontSize: 12,
-  },
-  modalFooter: {
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    flexDirection: 'row',
     gap: 12,
   },
-  closeModalButton: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    minHeight: 44,
-  },
-  closeModalButtonTablet: {
+  roleTypeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
     borderRadius: 10,
-    paddingVertical: 14,
-    minHeight: 52,
+    padding: 4,
+    marginBottom: 24,
   },
-  closeModalButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  closeModalButtonTextTablet: {
-    fontSize: 16,
-  },
-  saveButton: {
+  roleTypeOption: {
     flex: 1,
-    backgroundColor: '#9333EA',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    minHeight: 44,
-  },
-  saveButtonTablet: {
-    borderRadius: 10,
-    paddingVertical: 14,
-    minHeight: 52,
-  },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  saveButtonTextTablet: {
-    fontSize: 16,
-  },
-  modalActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#F3E8FF',
-    borderRadius: 8,
     paddingVertical: 12,
-    flex: 1,
+    borderRadius: 8,
+    gap: 8,
   },
-  modalActionButtonTablet: {
-    borderRadius: 10,
-    paddingVertical: 14,
+  roleTypeOptionSelected: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  modalActionButtonText: {
+  roleTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  roleTypeTextSelected: {
+    color: '#8B5CF6',
+  },
+  inputGroup: {
+    marginBottom: 24,
+  },
+  inputLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  inputLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#9333EA',
-  },
-  modalActionButtonTextTablet: {
-    fontSize: 16,
-  },
-  // Form Styles
-  formGroup: {
-    marginBottom: 16,
-  },
-  formLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 4,
-  },
-  formLabelTablet: {
-    fontSize: 16,
+    color: '#1E293B',
     marginBottom: 6,
   },
-  formHelpText: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginBottom: 4,
+  inputLabelTablet: {
+    fontSize: 16,
+    marginBottom: 8,
   },
-  formHelpTextTablet: {
+  requiredStar: {
+    color: '#EF4444',
     fontSize: 14,
   },
-  formInput: {
-    backgroundColor: '#FFFFFF',
+  inputSubtext: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 12,
+  },
+  inputSubtextTablet: {
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  textInput: {
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
     color: '#1E293B',
   },
-  formInputTablet: {
-    paddingVertical: 12,
+  textInputTablet: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  // Department Management Styles
-  departmentList: {
+  textAreaTablet: {
+    minHeight: 100,
+  },
+  departmentGrid: {
+    justifyContent: 'space-between',
     gap: 8,
   },
   departmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '48%',
+    minHeight: 60,
   },
-  departmentInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
+  departmentItemTablet: {
+    width: '31%',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 64,
   },
-  departmentText: {
+  departmentItemSelected: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#8B5CF6',
+  },
+  departmentTextContainer: {
     flex: 1,
+    marginLeft: 8,
   },
   departmentName: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  departmentNameTablet: {
+    fontSize: 14,
+  },
+  departmentNameSelected: {
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  departmentModule: {
+    fontSize: 10,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  departmentModuleTablet: {
+    fontSize: 11,
+  },
+  noDepartments: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDepartmentsText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  managerInfoCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 24,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+  },
+  managerInfoContent: {
+    flex: 1,
+  },
+  managerInfoTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1E293B',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  departmentNameTablet: {
-    fontSize: 16,
-  },
-  departmentModule: {
+  managerInfoText: {
     fontSize: 12,
     color: '#64748B',
+    lineHeight: 16,
   },
-  departmentModuleTablet: {
-    fontSize: 14,
-  },
-  addButton: {
-    padding: 4,
-  },
-  removeButton: {
-    padding: 4,
-  },
-  // Permissions Styles
-  permissionSection: {
-    marginBottom: 20,
-  },
-  permissionSectionHeader: {
+  permissionsButtonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  permissionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 8,
+  },
+  permissionsButtonTablet: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 10,
+  },
+  permissionsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  permissionsButtonTextTablet: {
+    fontSize: 14,
+  },
+  permissionsSummary: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  departmentSummary: {
     marginBottom: 8,
   },
-  permissionModuleName: {
+  departmentSummaryTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  permissionsListText: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  noPermissionsText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+  summaryCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    marginTop: 8,
+  },
+  summaryContent: {
+    flex: 1,
+  },
+  summaryTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#475569',
+    color: '#1E293B',
+    marginBottom: 8,
   },
-  permissionModuleNameTablet: {
+  summaryDetails: {
+    gap: 4,
+  },
+  summaryText: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  warningCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 10,
+    padding: 16,
+    gap: 12,
+    marginTop: 8,
+  },
+  warningContent: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 16,
+  },
+  cancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingVertical: 14,
+  },
+  cancelButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 16,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  cancelButtonTextTablet: {
     fontSize: 16,
   },
-  permissionCount: {
+  submitButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 10,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  submitButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  submitButtonTextTablet: {
+    fontSize: 16,
+  },
+  permissionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  permissionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.9,
+  },
+  permissionModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  permissionModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  permissionModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  permissionModalTitleTablet: {
+    fontSize: 24,
+  },
+  permissionModalSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  permissionModalSubtitleTablet: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  permissionModalBody: {
+    padding: 20,
+    maxHeight: height * 0.7,
+  },
+  permissionModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    gap: 12,
+  },
+  permissionsSection: {
+    marginBottom: 24,
+  },
+  permissionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  permissionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  permissionsTitleTablet: {
+    fontSize: 16,
+  },
+  permissionsModule: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  selectAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  selectAllText: {
     fontSize: 12,
     color: '#64748B',
   },
-  permissionGrid: {
+  selectAllTextSelected: {
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  managerPermissionInfo: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+  },
+  managerPermissionText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  loadingPermissions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  loadingTextTablet: {
+    fontSize: 14,
+  },
+  permissionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
@@ -1597,153 +2524,330 @@ const styles = StyleSheet.create({
   permissionChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     gap: 6,
-    backgroundColor: '#F3E8FF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    maxWidth: width * 0.42,
   },
-  permissionName: {
-    fontSize: 11,
-    color: '#9333EA',
+  permissionChipTablet: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 8,
+    maxWidth: width * 0.28,
   },
-  permissionNameTablet: {
-    fontSize: 12,
+  permissionChipSelected: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#8B5CF6',
   },
-  moreChip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  moreChipText: {
+  permissionText: {
     fontSize: 11,
     color: '#64748B',
+    flexShrink: 1,
   },
-  noDataText: {
-    fontSize: 14,
+  permissionTextTablet: {
+    fontSize: 13,
+  },
+  permissionTextSelected: {
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
+  permissionsCount: {
+    fontSize: 11,
     color: '#94A3B8',
-    textAlign: 'center',
-    padding: 20,
+    marginTop: 8,
+    textAlign: 'right',
   },
-  noDataTextTablet: {
-    fontSize: 16,
-    padding: 24,
-  },
-  // Delete Modal Styles
-  deleteModalContainer: {
+  updateModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
+    justifyContent: 'flex-end',
   },
-  deleteModalContent: {
+  updateModalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.9,
+  },
+  updateModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  updateModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     padding: 20,
-    width: '100%',
-    maxWidth: 400,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  deleteModalContentTablet: {
-    padding: 24,
-    borderRadius: 20,
-    maxWidth: 500,
-  },
-  deleteModalIcon: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  deleteModalTitle: {
+  updateModalTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#1E293B',
-    textAlign: 'center',
-    marginBottom: 8,
   },
-  deleteModalTitleTablet: {
-    fontSize: 22,
-    marginBottom: 12,
+  updateModalTitleTablet: {
+    fontSize: 24,
   },
-  deleteModalText: {
-    fontSize: 14,
+  updateModalSubtitle: {
+    fontSize: 12,
     color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    marginTop: 2,
   },
-  deleteModalTextTablet: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 24,
-  },
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  warningText: {
+  updateModalSubtitleTablet: {
     fontSize: 14,
-    color: '#D97706',
-    flex: 1,
+    marginTop: 4,
   },
-  deleteModalButtons: {
+  updateModalBody: {
+    padding: 20,
+    maxHeight: height * 0.7,
+  },
+  updateModalFooter: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  deleteModalButtonsTablet: {
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
     gap: 12,
   },
-  deleteCancelButton: {
+  roleDetailsModalOverlay: {
     flex: 1,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  roleDetailsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: height * 0.9,
+  },
+  roleDetailsModalContentTablet: {
+    maxHeight: height * 0.9,
+    width: isTablet ? '80%' : '100%',
+    alignSelf: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  roleDetailsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  roleDetailsTitleContainer: {
+    flex: 1,
+  },
+  roleDetailsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  roleDetailsModalTitleTablet: {
+    fontSize: 24,
+  },
+  roleDetailsModalSubtitle: {
+    fontSize: 14,
+    color: '#8B5CF6',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  roleDetailsModalSubtitleTablet: {
+    fontSize: 16,
+    marginTop: 4,
+  },
+  roleDetailsModalBody: {
+    padding: 20,
+  },
+  roleDetailsModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  closeDetailsButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
-  },
-  deleteCancelButtonTablet: {
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
     borderRadius: 10,
-    paddingVertical: 14,
-    minHeight: 52,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+    flex: 1,
   },
-  deleteCancelButtonText: {
+  closeDetailsButtonTablet: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  closeDetailsButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#64748B',
   },
-  deleteCancelButtonTextTablet: {
+  closeDetailsButtonTextTablet: {
     fontSize: 16,
   },
-  deleteConfirmButton: {
-    flex: 1,
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-    paddingVertical: 12,
+  detailsLoader: {
+    marginTop: 40,
+    marginBottom: 40,
+  },
+  roleInfoSection: {
+    marginBottom: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    minHeight: 44,
+    marginBottom: 12,
   },
-  deleteConfirmButtonTablet: {
-    borderRadius: 10,
-    paddingVertical: 14,
-    minHeight: 52,
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
   },
-  deleteConfirmButtonDisabled: {
-    opacity: 0.7,
+  sectionTitleTablet: {
+    fontSize: 18,
   },
-  deleteConfirmButtonText: {
+  countBadge: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 30,
+    alignItems: 'center',
+  },
+  countBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  roleInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  infoItem: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  fullWidthItem: {
+    width: '100%',
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  infoValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#1E293B',
   },
-  deleteConfirmButtonTextTablet: {
-    fontSize: 16,
+  descriptionText: {
+    fontWeight: '400',
+    lineHeight: 20,
+  },
+  departmentsGrid: {
+    gap: 12,
+  },
+  departmentChip: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  departmentIcon: {
+    marginTop: 2,
+    marginRight: 12,
+  },
+  departmentInfo: {
+    flex: 1,
+  },
+  departmentNameDetails: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  departmentModuleDetails: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  departmentDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  permissionsListContainer: {
+    gap: 12,
+  },
+  permissionRow: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+  },
+  permissionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  permissionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    flex: 1,
+    marginRight: 12,
+  },
+  permissionBadge: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  permissionBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  permissionDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  permissionMeta: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  permissionMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  permissionMetaText: {
+    fontSize: 11,
+    color: '#64748B',
   },
 });
 

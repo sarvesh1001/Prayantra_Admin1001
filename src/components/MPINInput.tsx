@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 
-const { width } = Dimensions.get('window');
+const { width: screenWidth } = Dimensions.get('window');
 
 interface MPINInputProps {
   length?: number;
@@ -40,6 +40,7 @@ const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
 }, ref) => {
   const [mpin, setMpin] = useState<string[]>(Array(length).fill(''));
   const inputsRef = useRef<TextInput[]>([]);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
     if (autoFocus) {
@@ -49,6 +50,32 @@ const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
     }
   }, [autoFocus]);
 
+  // Calculate dimensions based on container width
+  const calculateDimensions = () => {
+    if (containerWidth === 0) return { inputWidth: 50, inputHeight: 60 };
+    
+    const totalSpacing = (length - 1) * 8; // Reduced spacing for better fit
+    const availableWidth = containerWidth - 40; // Account for container padding
+    const maxInputWidth = 60;
+    const minInputWidth = 44;
+    
+    let inputWidth = (availableWidth - totalSpacing) / length;
+    
+    // Ensure input width stays within bounds
+    if (inputWidth > maxInputWidth) {
+      inputWidth = maxInputWidth;
+    } else if (inputWidth < minInputWidth) {
+      inputWidth = minInputWidth;
+    }
+    
+    return {
+      inputWidth,
+      inputHeight: 60,
+    };
+  };
+
+  const dimensions = calculateDimensions();
+
   const handleChangeText = (text: string, index: number) => {
     if (disabled) return;
 
@@ -56,7 +83,7 @@ const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
     
     // Handle paste
     if (text.length > 1) {
-      const pastedDigits = text.split('').slice(0, length);
+      const pastedDigits = text.replace(/[^0-9]/g, '').split('').slice(0, length);
       pastedDigits.forEach((digit, idx) => {
         if (idx < length) {
           newMpin[idx] = digit;
@@ -80,20 +107,22 @@ const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
     }
 
     // Single digit input
-    newMpin[index] = text;
-    setMpin(newMpin);
+    if (text === '' || /^\d$/.test(text)) {
+      newMpin[index] = text;
+      setMpin(newMpin);
 
-    // Auto-focus next input
-    if (text && index < length - 1) {
-      inputsRef.current[index + 1]?.focus();
-    }
+      // Auto-focus next input
+      if (text && index < length - 1) {
+        inputsRef.current[index + 1]?.focus();
+      }
 
-    // Check if all digits are entered
-    const currentMpin = newMpin.join('');
-    if (currentMpin.length === length) {
-      onComplete?.(currentMpin);
-      if (!showSubmitButton) {
-        Keyboard.dismiss();
+      // Check if all digits are entered
+      const currentMpin = newMpin.join('');
+      if (currentMpin.length === length) {
+        onComplete?.(currentMpin);
+        if (!showSubmitButton) {
+          Keyboard.dismiss();
+        }
       }
     }
   };
@@ -149,8 +178,13 @@ const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
     }
   };
 
+  const handleContainerLayout = (event: any) => {
+    const { width } = event.nativeEvent.layout;
+    setContainerWidth(width);
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={handleContainerLayout}>
       <View style={styles.inputsContainer}>
         {Array.from({ length }).map((_, index) => (
           <View key={index} style={styles.inputWrapper}>
@@ -160,6 +194,10 @@ const MPINInput = forwardRef<MPINInputRef, MPINInputProps>(({
               }}
               style={[
                 styles.input,
+                { 
+                  width: dimensions.inputWidth,
+                  height: dimensions.inputHeight,
+                },
                 error && styles.inputError,
                 mpin[index] && styles.inputFilled,
               ]}
@@ -212,20 +250,20 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingVertical: 20,
+    width: '100%',
   },
   inputsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
+    // flexWrap: 'wrap',
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   input: {
-    width: 50,
-    height: 60,
     borderWidth: 2,
     borderColor: '#E5E7EB',
     borderRadius: 12,
@@ -244,7 +282,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   separator: {
-    width: 10,
+    width: 8, // Reduced from 10 to 8
   },
   errorText: {
     color: '#EF4444',
@@ -259,7 +297,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 40,
     marginBottom: 16,
-    width: '80%',
+    width: '100%',
+    maxWidth: 300,
   },
   submitButtonDisabled: {
     backgroundColor: '#D1D5DB',
