@@ -34,6 +34,7 @@ import {
 
 const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
+const isLargeTablet = width >= 1024;
 
 // Interfaces for API responses
 interface AllRolesResponse {
@@ -62,13 +63,6 @@ interface SearchRolesResponse {
     };
     roles: Role[];
   };
-  message: string;
-  timestamp: string;
-}
-
-interface RoleDepartmentsResponse {
-  success: boolean;
-  data: Department[];
   message: string;
   timestamp: string;
 }
@@ -143,14 +137,22 @@ const PermissionSelectionModal: React.FC<PermissionSelectionModalProps> = ({
   };
 
   const handleSave = () => {
-    onSave(selectedPermissions);
+    // Filter permissions ONLY — do not touch departments
+    const cleanedPermissions = Object.fromEntries(
+      Object.entries(selectedPermissions).map(([dept, perms]) => [
+        dept,
+        perms || [],
+      ])
+    );
+
+    onSave(cleanedPermissions);
     onClose();
   };
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={onClose}
       statusBarTranslucent={true}
@@ -208,11 +210,13 @@ const PermissionSelectionModal: React.FC<PermissionSelectionModalProps> = ({
                             style={styles.selectAllButton}
                             onPress={() => toggleAllPermissions(departmentName)}
                           >
-                            <MaterialCommunityIcons
-                              name={isAllSelected ? "checkbox-marked" : "checkbox-blank-outline"}
-                              size={20}
-                              color={isAllSelected ? "#8B5CF6" : "#64748B"}
-                            />
+                            <View style={{ width: 24, alignItems: 'center' }}>
+                              <MaterialCommunityIcons
+                                name="shield-edit"
+                                size={isTablet ? 22 : 18}
+                                color="#FFFFFF"
+                              />
+                            </View>
                             <Text style={[
                               styles.selectAllText,
                               isAllSelected && styles.selectAllTextSelected
@@ -225,14 +229,14 @@ const PermissionSelectionModal: React.FC<PermissionSelectionModalProps> = ({
                       {isLoadingPermissions ? (
                         <View style={styles.loadingPermissions}>
                           <ActivityIndicator size="small" color="#8B5CF6" />
-                          <Text style={[styles.loadingText, isTablet && styles.loadingTextTablet]}>
+                          <Text style={[styles.loadingTextLarge, isTablet && styles.loadingTextTablet]}>
                             Loading {moduleCode} permissions...
                           </Text>
                         </View>
                       ) : allPermissions.length === 0 ? (
                         <View style={styles.loadingPermissions}>
                           <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#EF4444" />
-                          <Text style={[styles.loadingText, isTablet && styles.loadingTextTablet]}>
+                          <Text style={[styles.loadingTextLarge, isTablet && styles.loadingTextTablet]}>
                             No permissions available for {moduleCode} module
                           </Text>
                         </View>
@@ -279,25 +283,27 @@ const PermissionSelectionModal: React.FC<PermissionSelectionModalProps> = ({
               );
             })}
           </ScrollView>
-          <View style={styles.permissionModalFooter}>
-            <TouchableOpacity
-              style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-              onPress={onClose}
-            >
-              <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.submitButton, isTablet && styles.submitButtonTablet]}
-              onPress={handleSave}
-            >
-              <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
-              <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                Save Permissions
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <SafeAreaView edges={['bottom']} style={styles.permissionModalSafeFooter}>
+            <View style={styles.permissionModalFooter}>
+              <TouchableOpacity
+                style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+                onPress={onClose}
+              >
+                <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitButton, isTablet && styles.submitButtonTablet]}
+                onPress={handleSave}
+              >
+                <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
+                <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                  Save Permissions
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
       </View>
     </Modal>
@@ -316,7 +322,7 @@ const RoleDetailsModal: React.FC<{
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={onClose}
       statusBarTranslucent={true}
@@ -456,76 +462,352 @@ const RoleDetailsModal: React.FC<{
               </>
             )}
           </ScrollView>
-          <View style={styles.roleDetailsModalFooter}>
-            <TouchableOpacity
-              style={[styles.closeDetailsButton, isTablet && styles.closeDetailsButtonTablet]}
-              onPress={onClose}
-            >
-              <MaterialCommunityIcons name="close" size={isTablet ? 20 : 16} color="#64748B" />
-              <Text style={[styles.closeDetailsButtonText, isTablet && styles.closeDetailsButtonTextTablet]}>
-                Close
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <SafeAreaView edges={['bottom']} style={styles.roleDetailsModalSafeFooter}>
+            <View style={styles.roleDetailsModalFooter}>
+              <TouchableOpacity
+                style={[styles.closeDetailsButton, isTablet && styles.closeDetailsButtonTablet]}
+                onPress={onClose}
+              >
+                <MaterialCommunityIcons name="close" size={isTablet ? 20 : 16} color="#64748B" />
+                <Text style={[styles.closeDetailsButtonText, isTablet && styles.closeDetailsButtonTextTablet]}>
+                  Close
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
       </View>
     </Modal>
   );
 };
 
-// Update Role Modal Component
+// Enhanced Update Role Modal Component with department and permission editing
 const UpdateRoleModal: React.FC<{
   visible: boolean;
   onClose: () => void;
   role: Role | null;
   onUpdate: (roleId: string, data: UpdateRoleRequest) => void;
   isUpdating: boolean;
-}> = ({ visible, onClose, role, onUpdate, isUpdating }) => {
+  availableDepartments: Department[];
+}> = ({ visible, onClose, role, onUpdate, isUpdating, availableDepartments }) => {
   const [roleName, setRoleName] = useState('');
   const [description, setDescription] = useState('');
-  const [addDepartments, setAddDepartments] = useState<string[]>([]);
-  const [removeDepartments, setRemoveDepartments] = useState<string[]>([]);
-  const [addPermissions, setAddPermissions] = useState<string[]>([]);
-  const [removePermissions, setRemovePermissions] = useState<string[]>([]);
-  const [replacePermissions, setReplacePermissions] = useState<string[]>([]);
+  const [selectedDepartments, setSelectedDepartments] = useState<Department[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<Record<string, string[]>>({});
+  const [originalDepartments, setOriginalDepartments] = useState<Department[]>([]);
+  const [originalPermissions, setOriginalPermissions] = useState<Record<string, string[]>>({});
+  const [isPermissionModalVisible, setPermissionModalVisible] = useState(false);
+  const [availablePermissions, setAvailablePermissions] = useState<Record<string, string[]>>({});
+  const [loadingPermissionsFor, setLoadingPermissionsFor] = useState<string[]>([]);
+  const [loadingRoleDetails, setLoadingRoleDetails] = useState(false);
+  const { showToast } = useToast();
 
+  // Reset form when modal closes
   useEffect(() => {
-    if (role) {
+    if (!visible) {
+      resetForm();
+    }
+  }, [visible]);
+
+  // Load role details when role changes
+  useEffect(() => {
+    if (visible && role) {
+      loadRoleDetails();
+    }
+  }, [visible, role]);
+
+  const resetForm = () => {
+    setRoleName('');
+    setDescription('');
+    setSelectedDepartments([]);
+    setSelectedPermissions({});
+    setOriginalDepartments([]);
+    setOriginalPermissions({});
+    setAvailablePermissions({});
+    setLoadingPermissionsFor([]);
+    setPermissionModalVisible(false);
+  };
+
+  const loadRoleDetails = async () => {
+    if (!role) return;
+
+    setLoadingRoleDetails(true);
+    try {
+      // Fetch role details including departments and permissions
+      const response = await api.getAdminRoleWithDetails(role.admin_role_id);
+      const roleDetails = response.data.data;
+
+      // Set basic info
       setRoleName(role.role_name);
       setDescription(role.description || '');
-      setAddDepartments([]);
-      setRemoveDepartments([]);
-      setAddPermissions([]);
-      setRemovePermissions([]);
-      setReplacePermissions([]);
+
+      // Set departments
+      const departments = roleDetails.departments || [];
+      setSelectedDepartments(departments);
+      setOriginalDepartments(departments);
+
+      // For employee roles, load permissions
+      if (role.role_type === 1 && roleDetails.permissions) {
+        // Group permissions by department
+        const permissionsByDept: Record<string, string[]> = {};
+        
+        // First, map module codes to department names
+        const moduleToDeptName: Record<string, string> = {};
+        departments.forEach((dept: Department) => {
+          moduleToDeptName[dept.module_code] = dept.name;
+        });
+                
+        // Group permissions
+        roleDetails.permissions.forEach((perm: Permission) => {
+          const deptName = moduleToDeptName[perm.module];
+          if (deptName) {
+            if (!permissionsByDept[deptName]) {
+              permissionsByDept[deptName] = [];
+            }
+            permissionsByDept[deptName].push(perm.permission_name);
+          }
+        });
+        setSelectedPermissions(permissionsByDept);
+        setOriginalPermissions(permissionsByDept);
+      }
+
+      // Pre-fetch permissions for selected departments
+      if (role.role_type === 1) {
+        await fetchPermissionsForSelectedDepartments(departments);
+      }
+
+    } catch (error: any) {
+      console.error('Error loading role details:', error);
+      showToast('error', 'Failed to load role details');
+    } finally {
+      setLoadingRoleDetails(false);
     }
-  }, [role]);
+  };
+
+  const fetchPermissionsForSelectedDepartments = async (departments: Department[]) => {
+    const departmentsToLoad = departments.filter(
+      dept => !availablePermissions[dept.name]
+    );
+
+    if (departmentsToLoad.length > 0) {
+      await Promise.all(
+        departmentsToLoad.map(dept =>
+          fetchPermissionsForModule(dept.module_code, dept.name)
+        )
+      );
+    }
+  };
+
+  const fetchPermissionsForModule = async (moduleCode: string, departmentName: string) => {
+    try {
+      setLoadingPermissionsFor(prev => [...prev, departmentName]);
+      const response = await api.getPermissionsByModule(moduleCode);
+      const permissionsData = response.data;
+      const rawPermissions = permissionsData?.data?.permissions;
+      const permissions: string[] = Array.isArray(rawPermissions)
+        ? rawPermissions.map((p: Permission) => p.permission_name)
+        : [];
+      setAvailablePermissions(prev => ({
+        ...prev,
+        [departmentName]: permissions,
+      }));
+    } catch (error) {
+      console.error(`Error fetching permissions for module ${moduleCode}:`, error);
+      setAvailablePermissions(prev => ({
+        ...prev,
+        [departmentName]: [],
+      }));
+    } finally {
+      setLoadingPermissionsFor(prev => prev.filter(name => name !== departmentName));
+    }
+  };
+
+  const toggleDepartmentSelection = async (department: Department) => {
+    const departmentName = department.name;
+    const isCurrentlySelected = selectedDepartments.some(dept => dept.name === departmentName);
+
+    if (isCurrentlySelected) {
+      setSelectedDepartments(prev =>
+        prev.filter(dept => dept.name !== departmentName)
+      );
+    
+      setSelectedPermissions(prev => {
+        const copy = { ...prev };
+        delete copy[departmentName];
+        return copy;
+      });
+    
+      setAvailablePermissions(prev => {
+        const copy = { ...prev };
+        delete copy[departmentName];
+        return copy;
+      });
+    }
+    
+     else {
+      // Add department
+      setSelectedDepartments(prev => [...prev, department]);
+      
+      // For employee roles, fetch permissions for this department
+      if (role?.role_type === 1 && !availablePermissions[departmentName]) {
+        await fetchPermissionsForModule(department.module_code, departmentName);
+      }
+    }
+  };
+
+  const handleOpenPermissionModal = async () => {
+    if (selectedDepartments.length === 0) {
+      Alert.alert('Error', 'Please select departments first');
+      return;
+    }
+    
+    const departmentsToLoad = selectedDepartments.filter(
+      dept => !availablePermissions[dept.name]
+    );
+    
+    if (departmentsToLoad.length > 0) {
+      await Promise.all(
+        departmentsToLoad.map(dept =>
+          fetchPermissionsForModule(dept.module_code, dept.name)
+        )
+      );
+    }
+    
+    setPermissionModalVisible(true);
+  };
+
+  const handlePermissionSave = (permissions: Record<string, string[]>) => {
+    setSelectedPermissions(prev => {
+      const merged = { ...prev };
+    
+      Object.keys(permissions).forEach(deptName => {
+        merged[deptName] = permissions[deptName];
+      });
+    
+      return merged;
+    });    
+    setPermissionModalVisible(false);
+  };
 
   const handleSubmit = () => {
     if (!role || !roleName.trim()) {
       Alert.alert('Error', 'Role name is required');
       return;
     }
-
+  
+    if (selectedDepartments.length === 0) {
+      Alert.alert('Error', 'At least one department must be selected');
+      return;
+    }
+  
     const updateData: UpdateRoleRequest = {
       role_name: roleName.trim(),
       description: description.trim(),
-      add_departments: addDepartments,
-      remove_departments: removeDepartments,
-      add_permissions: addPermissions,
-      remove_permissions: removePermissions,
-      replace_permissions: replacePermissions,
     };
-
+  
+    /* ============================================================
+       DEPARTMENT CHANGES (SOURCE OF TRUTH = DEPARTMENT SELECTION)
+       ============================================================ */
+  
+    const originalDeptNames = originalDepartments.map(d => d.name);
+    const selectedDeptNames = selectedDepartments.map(d => d.name);
+  
+    const addDepartments = selectedDeptNames.filter(
+      name => !originalDeptNames.includes(name)
+    );
+  
+    const removeDepartments = originalDeptNames.filter(
+      name => !selectedDeptNames.includes(name)
+    );
+  
+    if (addDepartments.length > 0) {
+      updateData.add_departments = addDepartments;
+    }
+  
+    if (removeDepartments.length > 0) {
+      updateData.remove_departments = removeDepartments;
+    }
+  
+    /* ============================================================
+       PERMISSIONS (FINAL SNAPSHOT — NO DIFF LOGIC)
+       ============================================================ */
+  
+    if (role.role_type === 1) {
+      updateData.replace_permissions =
+        Object.values(selectedPermissions).flat();
+    }
+  
+    /* ============================================================
+       SUBMIT UPDATE
+       ============================================================ */
+  
     onUpdate(role.admin_role_id, updateData);
+  };
+  
+  const renderDepartmentItem = ({ item }: DepartmentListItem) => {
+    const isSelected = selectedDepartments.some(dept => dept.name === item.name);
+    const isOriginal = originalDepartments.some(dept => dept.name === item.name);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.departmentItem,
+          isSelected && styles.departmentItemSelected,
+          isTablet && styles.departmentItemTablet,
+          isOriginal && styles.originalDepartmentItem,
+        ]}
+        onPress={() => toggleDepartmentSelection(item)}
+        disabled={isUpdating || loadingRoleDetails}
+      >
+        <MaterialCommunityIcons
+          name={isSelected ? "office-building-cog" : "office-building"}
+          size={isTablet ? 24 : 20}
+          color={
+            isSelected 
+              ? '#8B5CF6' 
+              : isOriginal 
+                ? '#10B981'
+                : '#64748B'
+          }
+        />
+        <View style={styles.departmentTextContainer}>
+          <Text
+            style={[
+              styles.departmentName,
+              isSelected && styles.departmentNameSelected,
+              isOriginal && styles.originalDepartmentName,
+              isTablet && styles.departmentNameTablet,
+            ]}
+            numberOfLines={1}
+          >
+            {item.name}
+          </Text>
+          <Text
+            style={[
+              styles.departmentModule,
+              isTablet && styles.departmentModuleTablet,
+            ]}
+            numberOfLines={1}
+          >
+            Module: {item.module_code}
+          </Text>
+          {isOriginal && (
+            <Text style={styles.originalBadge}>Original</Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   if (!role) return null;
 
+  const isEmployeeRole = role.role_type === 1;
+  const isSystemRole = role.is_system_role;
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={onClose}
       statusBarTranslucent={true}
@@ -538,96 +820,265 @@ const UpdateRoleModal: React.FC<{
                 Update Role: {role.role_name}
               </Text>
               <Text style={[styles.updateModalSubtitle, isTablet && styles.updateModalSubtitleTablet]}>
-                Role ID: {role.admin_role_id.slice(0, 8)}...
+                {isEmployeeRole ? 'Employee Role' : 'Manager Role'} • {isSystemRole ? 'System Role' : 'Custom Role'}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} disabled={isUpdating}>
+            <TouchableOpacity onPress={onClose} disabled={isUpdating || loadingRoleDetails}>
               <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
             </TouchableOpacity>
           </View>
+          
           <ScrollView
             style={styles.updateModalBody}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={loadingRoleDetails}
+                onRefresh={loadRoleDetails}
+                colors={['#8B5CF6']}
+                tintColor="#8B5CF6"
+              />
+            }
           >
-            <View style={styles.inputGroup}>
-              <View style={styles.inputLabelRow}>
-                <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
-                  Role Name
-                </Text>
-                <Text style={styles.requiredStar}>*</Text>
+            {loadingRoleDetails ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#8B5CF6" />
+                <Text style={styles.loadingRoleText}>Loading role details...</Text>
               </View>
-              <TextInput
-                style={[styles.textInput, isTablet && styles.textInputTablet]}
-                value={roleName}
-                onChangeText={setRoleName}
-                placeholder="Enter role name"
-                placeholderTextColor="#94A3B8"
-                editable={!isUpdating}
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
-                Description
-              </Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea, isTablet && styles.textAreaTablet]}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Enter role description"
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={isTablet ? 4 : 3}
-                editable={!isUpdating}
-              />
-            </View>
-            <View style={styles.warningCard}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#F59E0B" />
-              <View style={styles.warningContent}>
-                <Text style={styles.warningTitle}>Important Notes</Text>
-                <Text style={styles.warningText}>
-                  • Only non-system roles can be updated{'\n'}
-                  • Role level and type cannot be changed{'\n'}
-                  • Departments and permissions changes are applied immediately{'\n'}
-                  • System roles (like Super Admin) have limited updates
-                </Text>
-              </View>
-            </View>
-          </ScrollView>
-          <View style={styles.updateModalFooter}>
-            <TouchableOpacity
-              style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-              onPress={onClose}
-              disabled={isUpdating}
-            >
-              <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                isTablet && styles.submitButtonTablet,
-                isUpdating && styles.submitButtonDisabled,
-                (!roleName.trim() || role.is_system_role) && styles.submitButtonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={isUpdating || !roleName.trim() || role.is_system_role}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
-                  <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                    Update Role
+            ) : (
+              <>
+                {/* Basic Role Info */}
+                <View style={styles.inputGroup}>
+                  <View style={styles.inputLabelRow}>
+                    <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                      Role Name
+                    </Text>
+                    <Text style={styles.requiredStar}>*</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.textInput, isTablet && styles.textInputTablet]}
+                    value={roleName}
+                    onChangeText={setRoleName}
+                    placeholder="Enter role name"
+                    placeholderTextColor="#94A3B8"
+                    editable={!isUpdating && !isSystemRole}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                    Description
                   </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea, isTablet && styles.textAreaTablet]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Enter role description"
+                    placeholderTextColor="#94A3B8"
+                    multiline
+                    numberOfLines={isTablet ? 4 : 3}
+                    editable={!isUpdating && !isSystemRole}
+                  />
+                </View>
+
+                {/* Departments Selection */}
+                <View style={styles.inputGroup}>
+                  <View style={styles.inputLabelRow}>
+                    <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                      Select Departments
+                    </Text>
+                    <Text style={styles.requiredStar}>*</Text>
+                  </View>
+                  <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
+                    {availableDepartments.length} departments available • {selectedDepartments.length} selected
+                  </Text>
+                  <FlatList
+                    data={availableDepartments}
+                    renderItem={renderDepartmentItem}
+                    keyExtractor={(item: Department) => item.system_department_id}
+                    numColumns={isLargeTablet ? 4 : (isTablet ? 3 : 2)}
+                    columnWrapperStyle={styles.departmentGrid}
+                    scrollEnabled={false}
+                    ListEmptyComponent={
+                      <View style={styles.noDepartments}>
+                        <MaterialCommunityIcons name="office-building" size={40} color="#CBD5E1" />
+                        <Text style={styles.noDepartmentsText}>No departments available</Text>
+                      </View>
+                    }
+                  />
+                </View>
+
+                {/* Permissions Configuration (Employee Role Only) */}
+                {isEmployeeRole && selectedDepartments.length > 0 && (
+                  <View style={styles.inputGroup}>
+                    <View style={styles.permissionsButtonContainer}>
+                      <View>
+                        <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
+                          Permissions Configuration
+                        </Text>
+                        <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
+                          Click to configure permissions for selected departments
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.permissionsButton, isTablet && styles.permissionsButtonTablet]}
+                        onPress={handleOpenPermissionModal}
+                        disabled={isUpdating}
+                      >
+                        <MaterialCommunityIcons
+                          name="shield-edit"
+                          size={isTablet ? 20 : 16}
+                          color="#FFFFFF"
+                        />
+                        <Text style={[styles.permissionsButtonText, isTablet && styles.permissionsButtonTextTablet]}>
+                          Configure Permissions
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {/* Permissions Summary */}
+                    <View style={styles.permissionsSummary}>
+                      {selectedDepartments.map(dept => {
+                        const perms = selectedPermissions[dept.name] || [];
+                        return (
+                          <View key={dept.name} style={styles.departmentSummary}>
+                            <Text style={styles.departmentSummaryTitle}>
+                              {dept.name} ({perms.length} permissions)
+                            </Text>
+                            {perms.length > 0 ? (
+                              <Text style={styles.permissionsListText} numberOfLines={2}>
+                                {perms.slice(0, 3).join(', ')}
+                                {perms.length > 3 && ` and ${perms.length - 3} more...`}
+                              </Text>
+                            ) : (
+                              <Text style={styles.noPermissionsText}>No permissions selected</Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {/* Manager Role Info */}
+                {!isEmployeeRole && selectedDepartments.length > 0 && (
+                  <View style={styles.managerInfoCard}>
+                    <MaterialCommunityIcons name="information" size={20} color="#8B5CF6" />
+                    <View style={styles.managerInfoContent}>
+                      <Text style={styles.managerInfoTitle}>Manager Role Information</Text>
+                      <Text style={styles.managerInfoText}>
+                        Manager roles automatically receive ALL permissions for their assigned departments.
+                        No additional permission configuration is required.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* System Role Warning */}
+                {isSystemRole && (
+                  <View style={styles.warningCard}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#F59E0B" />
+                    <View style={styles.warningContent}>
+                      <Text style={styles.warningTitle}>System Role Restrictions</Text>
+                      <Text style={styles.warningText}>
+                        • System roles have limited editing capabilities{'\n'}
+                        • Role name cannot be changed{'\n'}
+                        • Only description can be updated
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Summary */}
+                <View style={styles.summaryCard}>
+                  <MaterialCommunityIcons name="clipboard-list-outline" size={24} color="#8B5CF6" />
+                  <View style={styles.summaryContent}>
+                    <Text style={styles.summaryTitle}>Update Summary</Text>
+                    <View style={styles.summaryDetails}>
+                      <Text style={styles.summaryText}>
+                        • Role Type: {isEmployeeRole ? 'Employee (Type 1)' : 'Manager (Type 2)'}
+                      </Text>
+                      <Text style={styles.summaryText}>
+                        • Departments: {selectedDepartments.length} selected
+                      </Text>
+                      {isEmployeeRole && (
+                        <Text style={styles.summaryText}>
+                          • Total Permissions: {Object.values(selectedPermissions).flat().length}
+                        </Text>
+                      )}
+                      <Text style={styles.summaryText}>
+                        • Changes: {
+                          (selectedDepartments.length !== originalDepartments.length ||
+                          roleName !== role.role_name ||
+                          description !== (role.description || '')) 
+                            ? 'Yes' 
+                            : 'No'
+                        }
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+
+          <SafeAreaView edges={['bottom']} style={styles.updateModalSafeFooter}>
+            <View style={styles.updateModalFooter}>
+              <TouchableOpacity
+                style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+                onPress={onClose}
+                disabled={isUpdating}
+              >
+                <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  isTablet && styles.submitButtonTablet,
+                  isUpdating && styles.submitButtonDisabled,
+                  (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
+                  isSystemRole && roleName === role.role_name && styles.submitButtonDisabled,
+                ]}
+                onPress={handleSubmit}
+                disabled={
+                  isUpdating || 
+                  !roleName.trim() || 
+                  selectedDepartments.length === 0 ||
+                  (isSystemRole && roleName === role.role_name)
+                }
+              >
+                {isUpdating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="check" size={isTablet ? 20 : 16} color="#FFFFFF" />
+                    <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                      Update Role
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
       </View>
+
+      {/* Permission Selection Modal */}
+      {isEmployeeRole && (
+        <PermissionSelectionModal
+          visible={isPermissionModalVisible}
+          onClose={() => setPermissionModalVisible(false)}
+          onSave={handlePermissionSave}
+          initialPermissions={selectedPermissions}
+          availablePermissions={availablePermissions}
+          selectedDepartments={selectedDepartments}
+          isLoadingPermissions={loadingPermissionsFor.length > 0}
+          isManagerRole={false}
+        />
+      )}
     </Modal>
   );
 };
@@ -825,7 +1276,7 @@ const CreateRoleModal: React.FC<{
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={handleClose}
       statusBarTranslucent={true}
@@ -943,7 +1394,7 @@ const CreateRoleModal: React.FC<{
                 data={availableDepartments}
                 renderItem={renderDepartmentItem}
                 keyExtractor={(item: Department) => item.system_department_id}
-                numColumns={isTablet ? 3 : 2}
+                numColumns={isLargeTablet ? 4 : (isTablet ? 3 : 2)}
                 columnWrapperStyle={styles.departmentGrid}
                 scrollEnabled={false}
                 ListEmptyComponent={
@@ -974,7 +1425,7 @@ const CreateRoleModal: React.FC<{
                   >
                     <MaterialCommunityIcons
                       name="shield-edit"
-                      size={isTablet ? 24 : 20}
+                      size={isTablet ? 20 : 16}
                       color="#FFFFFF"
                     />
                     <Text style={[styles.permissionsButtonText, isTablet && styles.permissionsButtonTextTablet]}>
@@ -1049,38 +1500,44 @@ const CreateRoleModal: React.FC<{
               </View>
             )}
           </ScrollView>
-          <View style={styles.createModalFooter}>
-            <TouchableOpacity
-              style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-              onPress={handleClose}
-              disabled={isCreating}
-            >
-              <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
-                Cancel
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                isTablet && styles.submitButtonTablet,
-                isCreating && styles.submitButtonDisabled,
-                (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
-              ]}
-              onPress={handleCreateRole}
-              disabled={isCreating || !roleName.trim() || selectedDepartments.length === 0}
-            >
-              {isCreating ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <MaterialCommunityIcons name="plus" size={isTablet ? 24 : 20} color="#FFFFFF" />
-                  <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                    Create {roleType === 'employee' ? 'Employee' : 'Manager'} Role
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+          <SafeAreaView edges={['bottom']} style={styles.createModalSafeFooter}>
+            <View style={styles.createModalFooter}>
+              <TouchableOpacity
+                style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+                onPress={handleClose}
+                disabled={isCreating}
+              >
+                <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  isTablet && styles.submitButtonTablet,
+                  isCreating && styles.submitButtonDisabled,
+                  (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
+                ]}
+                onPress={handleCreateRole}
+                disabled={isCreating || !roleName.trim() || selectedDepartments.length === 0}
+              >
+                {isCreating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="plus"
+                      size={isTablet ? 20 : 16}
+                      color="#FFFFFF"
+                    />
+                    <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                      {roleType === 'employee' ? 'Create Employee Role' : 'Create Manager Role'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
       </View>
 
@@ -1214,7 +1671,7 @@ const CompanyManagementScreen = () => {
     },
   });
 
-  // Update role mutation
+  // Update role mutation - FIXED to use correct API
   const updateRoleMutation = useMutation({
     mutationFn: ({ roleId, data }: { roleId: string; data: UpdateRoleRequest }) =>
       api.updateRole(roleId, data),
@@ -1540,8 +1997,8 @@ const CompanyManagementScreen = () => {
           isTablet && styles.rolesListTablet,
           rolesToDisplay.length === 0 && styles.emptyListContainer,
         ]}
-        numColumns={isTablet ? 2 : 1}
-        columnWrapperStyle={isTablet && styles.rolesGridTablet}
+        numColumns={isLargeTablet ? 3 : (isTablet ? 2 : 1)}
+        columnWrapperStyle={(isTablet || isLargeTablet) && styles.rolesGridTablet}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1620,6 +2077,7 @@ const CompanyManagementScreen = () => {
         role={selectedRole}
         onUpdate={handleUpdateRole}
         isUpdating={updateRoleMutation.isPending}
+        availableDepartments={availableDepartments}
       />
 
       <RoleDetailsModal
@@ -1793,7 +2251,7 @@ const styles = StyleSheet.create({
   },
   roleCardTablet: {
     flex: 1,
-    minWidth: '48%',
+    minWidth: isLargeTablet ? '31%' : '48%',
     marginBottom: 16,
   },
   roleHeader: {
@@ -2021,23 +2479,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  // Create Modal Styles
   createModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
   createModalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     maxHeight: height * 0.9,
+    width: '100%',
   },
   createModalContentTablet: {
     maxHeight: height * 0.9,
-    width: isTablet ? '80%' : '100%',
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
   },
   createModalHeader: {
     flexDirection: 'row',
@@ -2068,10 +2526,15 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: height * 0.7,
   },
+  createModalSafeFooter: {
+    backgroundColor: '#FFFFFF',
+  },
   createModalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 12,
@@ -2179,7 +2642,7 @@ const styles = StyleSheet.create({
     minHeight: 60,
   },
   departmentItemTablet: {
-    width: '31%',
+    width: isLargeTablet ? '23%' : '31%',
     paddingHorizontal: 14,
     paddingVertical: 12,
     minHeight: 64,
@@ -2187,6 +2650,9 @@ const styles = StyleSheet.create({
   departmentItemSelected: {
     backgroundColor: '#F5F3FF',
     borderColor: '#8B5CF6',
+  },
+  originalDepartmentItem: {
+    borderColor: '#10B981',
   },
   departmentTextContainer: {
     flex: 1,
@@ -2204,6 +2670,9 @@ const styles = StyleSheet.create({
     color: '#8B5CF6',
     fontWeight: '600',
   },
+  originalDepartmentName: {
+    fontWeight: '600',
+  },
   departmentModule: {
     fontSize: 10,
     color: '#94A3B8',
@@ -2211,6 +2680,16 @@ const styles = StyleSheet.create({
   },
   departmentModuleTablet: {
     fontSize: 11,
+  },
+  originalBadge: {
+    fontSize: 10,
+    color: '#10B981',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
   noDepartments: {
     alignItems: 'center',
@@ -2248,24 +2727,26 @@ const styles = StyleSheet.create({
   },
   permissionsButtonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  permissionsButton: {
+    alignItems: 'flex-start',
+    gap: 12,
+    flexWrap: 'wrap',        // ✅ KEY FIX
+  },  permissionsButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#8B5CF6',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    gap: 8,
+    gap: 6,
+    minWidth: 160,
+    alignSelf: 'flex-start',
   },
   permissionsButtonTablet: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
-    gap: 10,
+    gap: 8,
   },
   permissionsButtonText: {
     color: '#FFFFFF',
@@ -2281,9 +2762,13 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    marginTop: 8,
   },
   departmentSummary: {
-    marginBottom: 8,
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   departmentSummaryTitle: {
     fontSize: 12,
@@ -2379,12 +2864,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B5CF6',
     borderRadius: 10,
     paddingVertical: 14,
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    minHeight: 48,
   },
   submitButtonTablet: {
     borderRadius: 12,
     paddingVertical: 16,
-    gap: 10,
+    gap: 8,
   },
   submitButtonDisabled: {
     opacity: 0.6,
@@ -2397,23 +2884,23 @@ const styles = StyleSheet.create({
   submitButtonTextTablet: {
     fontSize: 16,
   },
+  // Permission Modal Styles
   permissionModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
   permissionModalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     maxHeight: height * 0.9,
+    width: '100%',
   },
   permissionModalContentTablet: {
     maxHeight: height * 0.9,
-    width: isTablet ? '80%' : '100%',
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
   },
   permissionModalHeader: {
     flexDirection: 'row',
@@ -2444,10 +2931,15 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: height * 0.7,
   },
+  permissionModalSafeFooter: {
+    backgroundColor: '#FFFFFF',
+  },
   permissionModalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 12,
@@ -2509,7 +3001,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     gap: 8,
   },
-  loadingText: {
+  loadingTextLarge: {
     fontSize: 12,
     color: '#94A3B8',
   },
@@ -2562,23 +3054,23 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'right',
   },
+  // Update Modal Styles
   updateModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
   updateModalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     maxHeight: height * 0.9,
+    width: '100%',
   },
   updateModalContentTablet: {
     maxHeight: height * 0.9,
-    width: isTablet ? '80%' : '100%',
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
   },
   updateModalHeader: {
     flexDirection: 'row',
@@ -2609,31 +3101,46 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: height * 0.7,
   },
+  updateModalSafeFooter: {
+    backgroundColor: '#FFFFFF',
+  },
   updateModalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 12,
   },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  loadingRoleText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#64748B',
+  },
+  // Role Details Modal Styles
   roleDetailsModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
   roleDetailsModalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     maxHeight: height * 0.9,
+    width: '100%',
   },
   roleDetailsModalContentTablet: {
     maxHeight: height * 0.9,
-    width: isTablet ? '80%' : '100%',
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
   },
   roleDetailsModalHeader: {
     flexDirection: 'row',
@@ -2667,9 +3174,14 @@ const styles = StyleSheet.create({
   roleDetailsModalBody: {
     padding: 20,
   },
+  roleDetailsModalSafeFooter: {
+    backgroundColor: '#FFFFFF',
+  },
   roleDetailsModalFooter: {
     flexDirection: 'row',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
   },

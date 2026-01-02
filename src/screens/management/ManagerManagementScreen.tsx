@@ -710,42 +710,53 @@ const ManagerManagementScreen = () => {
               )}
             </ScrollView>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-                onPress={() => {
-                  setCreateModalVisible(false);
-                  resetForm();
-                }}
-                disabled={createRoleMutation.isPending}
-              >
-                <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  isTablet && styles.submitButtonTablet,
-                  createRoleMutation.isPending && styles.submitButtonDisabled,
-                  (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
-                ]}
-                onPress={handleCreateRole}
-                disabled={createRoleMutation.isPending || !roleName.trim() || selectedDepartments.length === 0}
-              >
-                {createRoleMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="shield-check" size={isTablet ? 24 : 20} color="#FFFFFF" />
-                    <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                      Create Manager Role
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+            <SafeAreaView edges={['bottom']} style={styles.modalFooterSafe}>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+                  onPress={() => {
+                    setCreateModalVisible(false);
+                    resetForm();
+                  }}
+                  disabled={createRoleMutation.isPending}
+                >
+                  <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    isTablet && styles.submitButtonTablet,
+                    createRoleMutation.isPending && styles.submitButtonDisabled,
+                    (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
+                  ]}
+                  onPress={handleCreateRole}
+                  disabled={createRoleMutation.isPending || !roleName.trim() || selectedDepartments.length === 0}
+                >
+                  {createRoleMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons
+                        name="shield-check"
+                        size={isTablet ? 22 : 18}
+                        color="#FFFFFF"
+                      />
+                      <Text
+                        style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        {isTablet ? 'Create Manager Role' : 'Create Role'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+
           </View>
         </View>
       </Modal>
@@ -1172,15 +1183,7 @@ const styles = StyleSheet.create({
   modalBody: {
     padding: 20,
   },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    gap: 12,
-  },
-  managerInfoCard: {
+    managerInfoCard: {
     flexDirection: 'row',
     backgroundColor: '#F5F3FF',
     borderRadius: 10,
@@ -1372,8 +1375,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#8B5CF6',
     borderRadius: 10,
     paddingVertical: 14,
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+    minHeight: 48,          // ✅ prevents clipping
   },
+  
   submitButtonTablet: {
     borderRadius: 12,
     paddingVertical: 16,
@@ -1577,7 +1583,19 @@ const styles = StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     borderColor: '#EDE9FE',
+  },modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28, // ✅ prevents nav overlap
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    gap: 12,
   },
+  modalFooterSafe: {
+    backgroundColor: '#FFFFFF',
+  },    
   managerNoteText: {
     flex: 1,
     fontSize: 12,

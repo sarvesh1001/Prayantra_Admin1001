@@ -1163,42 +1163,46 @@ const EmployeeManagementScreen = () => {
             </ScrollView>
 
             {/* Modal Footer */}
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-                onPress={() => {
-                  setCreateModalVisible(false);
-                  resetForm();
-                }}
-                disabled={createRoleMutation.isPending}
-              >
-                <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  isTablet && styles.submitButtonTablet,
-                  createRoleMutation.isPending && styles.submitButtonDisabled,
-                  (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
-                ]}
-                onPress={handleCreateRole}
-                disabled={createRoleMutation.isPending || !roleName.trim() || selectedDepartments.length === 0}
-              >
-                {createRoleMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
-                    <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                      Create Role
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+            {/* Modal Footer */}
+            <SafeAreaView edges={['bottom']} style={styles.modalFooterSafe}>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
+                  onPress={() => {
+                    setCreateModalVisible(false);
+                    resetForm();
+                  }}
+                  disabled={createRoleMutation.isPending}
+                >
+                  <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    isTablet && styles.submitButtonTablet,
+                    createRoleMutation.isPending && styles.submitButtonDisabled,
+                    (!roleName.trim() || selectedDepartments.length === 0) && styles.submitButtonDisabled,
+                  ]}
+                  onPress={handleCreateRole}
+                  disabled={createRoleMutation.isPending || !roleName.trim() || selectedDepartments.length === 0}
+                >
+                  {createRoleMutation.isPending ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="check" size={isTablet ? 24 : 20} color="#FFFFFF" />
+                      <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
+                        Create Role
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+
           </View>
         </View>
       </Modal>
@@ -1610,11 +1614,14 @@ const styles = StyleSheet.create({
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 28, // ✅ was 20
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 12,
   },
+  
   inputGroup: {
     marginBottom: 24,
   },
@@ -1731,19 +1738,23 @@ const styles = StyleSheet.create({
   },
   permissionsButtonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  permissionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#C084FC',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 8,
-  },
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 12,
+    },
+    permissionsButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#C084FC',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 10,
+      gap: 8,
+      minWidth: 160,
+      alignSelf: 'flex-start', // ✅ prevents overflow
+    },
+    
   permissionsButtonTablet: {
     paddingHorizontal: 20,
     paddingVertical: 12,
@@ -2220,6 +2231,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF5FF',
     borderColor: '#C084FC',
   },
+  modalFooterSafe: {
+    backgroundColor: '#FFFFFF'
+  },
+  
   permissionText: {
     fontSize: 11,
     color: '#64748B',
