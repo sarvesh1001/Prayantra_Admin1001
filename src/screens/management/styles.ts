@@ -271,6 +271,54 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: '#EF4444',
   },
+  // Add to existing styles
+
+// Tab Switcher Styles
+tabSwitcher: {
+  flexDirection: 'row',
+  backgroundColor: '#FFFFFF',
+  marginHorizontal: 16,
+  marginTop: 8,
+  marginBottom: 12,
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  overflow: 'hidden',
+  padding: 4,
+},
+tabButton: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  borderRadius: 8,
+  gap: 8,
+},
+activeTabButton: {
+  backgroundColor: '#F5F3FF',
+},
+tabButtonText: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#64748B',
+},
+activeTabButtonText: {
+  color: '#8B5CF6',
+},
+
+// Admin List Styles
+adminsList: {
+  paddingHorizontal: 16,
+  paddingBottom: 100,
+},
+adminsListTablet: {
+  paddingHorizontal: 24,
+},
+adminsGridTablet: {
+  justifyContent: 'space-between',
+  gap: 16,
+},
   fab: {
     position: 'absolute',
     bottom: 20,
@@ -1272,6 +1320,974 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
   },
-});
 
+// Add to styles.ts
+
+// Admin Card Styles
+adminCard: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.05,
+  shadowRadius: 2,
+  elevation: 2,
+},
+adminCardTablet: {
+  flex: 1,
+  minWidth: isLargeTablet ? '31%' : '48%',
+  marginBottom: 16,
+},
+adminHeader: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  marginBottom: 16,
+},
+adminIconContainer: {
+  width: 48,
+  height: 48,
+  borderRadius: 12,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 12,
+},
+adminInfo: {
+  flex: 1,
+  marginRight: 12,
+},
+adminTitleRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 4,
+},
+adminName: {
+  fontSize: 16,
+  fontWeight: '700',
+  color: '#1E293B',
+  flex: 1,
+},
+adminNameTablet: {
+  fontSize: 18,
+},
+adminStatusContainer: {
+  marginLeft: 8,
+},
+activeBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#D1FAE5',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+  gap: 4,
+},
+activeBadgeText: {
+  color: '#065F46',
+  fontSize: 10,
+  fontWeight: '600',
+},
+inactiveBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#FEE2E2',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+  gap: 4,
+},
+inactiveBadgeText: {
+  color: '#991B1B',
+  fontSize: 10,
+  fontWeight: '600',
+},
+adminUsername: {
+  fontSize: 12,
+  color: '#64748B',
+  marginBottom: 8,
+},
+adminMeta: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+},
+reportsToContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 4,
+  marginTop: 4,
+},
+reportsToText: {
+  fontSize: 11,
+  color: '#64748B',
+},
+adminActions: {
+  flexDirection: 'row',
+  gap: 8,
+  paddingTop: 12,
+  borderTopWidth: 1,
+  borderTopColor: '#F1F5F9',
+},
+settingsButton: {
+  backgroundColor: '#F1F5F9',
+},
+
+// Admin Modal Specific Styles
+roleSearch: {
+  marginBottom: 12,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 8,
+},
+roleSearchInput: {
+  marginLeft: 8,
+  marginRight: 8,
+  fontSize: 14,
+},
+roleList: {
+  maxHeight: 200,
+  marginBottom: 12,
+},
+roleOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  backgroundColor: '#F8FAFC',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 10,
+  padding: 12,
+  marginBottom: 8,
+},
+roleOptionSelected: {
+  backgroundColor: '#F5F3FF',
+  borderColor: '#8B5CF6',
+},
+currentRoleOption: {
+  borderColor: '#10B981',
+},
+roleOptionContent: {
+  flex: 1,
+  marginRight: 12,
+},
+roleOptionHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginBottom: 4,
+  gap: 8,
+},
+// roleName: {
+//   fontSize: 14,
+//   fontWeight: '600',
+//   color: '#1E293B',
+//   flex: 1,
+// },
+// roleNameTablet: {
+//   fontSize: 16,
+// },
+roleDescriptionSmall: {
+  fontSize: 11,
+  color: '#64748B',
+  marginBottom: 4,
+  lineHeight: 14,
+},
+roleMetaSmall: {
+  flexDirection: 'row',
+  gap: 8,
+},
+roleMetaText: {
+  fontSize: 10,
+  color: '#64748B',
+},
+systemBadgeSmall: {
+  backgroundColor: '#10B981',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+},
+systemBadgeTextSmall: {
+  color: '#FFFFFF',
+  fontSize: 10,
+  fontWeight: '600',
+},
+currentBadge: {
+  backgroundColor: '#10B981',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+  marginLeft: 8,
+},
+currentBadgeText: {
+  color: '#FFFFFF',
+  fontSize: 10,
+  fontWeight: '600',
+},
+
+// Reports To Selector
+reportsToSelector: {
+  gap: 8,
+},
+reportsToOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F8FAFC',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 10,
+  padding: 12,
+  gap: 12,
+},
+reportsToOptionSelected: {
+  backgroundColor: '#F5F3FF',
+  borderColor: '#8B5CF6',
+},
+reportsToInfo: {
+  flex: 1,
+},
+// reportsToText: {
+//   fontSize: 14,
+//   color: '#1E293B',
+//   fontWeight: '500',
+// },
+reportsToTextSelected: {
+  color: '#8B5CF6',
+  fontWeight: '600',
+},
+reportsToUsername: {
+  fontSize: 11,
+  color: '#64748B',
+  marginTop: 2,
+},
+
+// Additional Stats
+additionalStats: {
+  flexDirection: 'row',
+  backgroundColor: '#FFFFFF',
+  marginHorizontal: 16,
+  marginBottom: 12,
+  padding: 12,
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.05,
+  shadowRadius: 2,
+  elevation: 2,
+},
+additionalStatsTablet: {
+  marginHorizontal: 24,
+  marginBottom: 16,
+  padding: 16,
+  borderRadius: 12,
+},
+additionalStatItem: {
+  flex: 1,
+  alignItems: 'center',
+},
+additionalStatCount: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#1E293B',
+  marginTop: 4,
+},
+additionalStatLabel: {
+  fontSize: 10,
+  color: '#64748B',
+  marginTop: 2,
+  textTransform: 'uppercase',
+},
+// Add to styles.ts
+
+// Admin Details Modal Styles
+adminDetailsModalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 16,
+},
+adminDetailsModalContent: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 20,
+  maxHeight: height * 0.9,
+  width: '100%',
+},
+adminDetailsModalContentTablet: {
+  maxHeight: height * 0.9,
+  width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
+},
+adminDetailsModalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#E2E8F0',
+},
+adminDetailsTitleContainer: {
+  flex: 1,
+},
+adminDetailsModalTitle: {
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#1E293B',
+},
+adminDetailsModalTitleTablet: {
+  fontSize: 24,
+},
+adminDetailsModalSubtitle: {
+  fontSize: 14,
+  color: '#8B5CF6',
+  marginTop: 2,
+  fontWeight: '600',
+},
+adminDetailsModalSubtitleTablet: {
+  fontSize: 16,
+  marginTop: 4,
+},
+adminDetailsModalBody: {
+  padding: 20,
+},
+adminDetailsModalSafeFooter: {
+  backgroundColor: '#FFFFFF',
+},
+adminDetailsModalFooter: {
+  flexDirection: 'row',
+  paddingHorizontal: 20,
+  paddingTop: 16,
+  paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+},
+adminDetailsHeader: {
+  flexDirection: 'row',
+  marginBottom: 20,
+},
+adminAvatarContainer: {
+  width: 64,
+  height: 64,
+  borderRadius: 32,
+  backgroundColor: '#F5F3FF',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 16,
+},
+adminHeaderInfo: {
+  flex: 1,
+},
+adminHeaderNameRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginBottom: 4,
+},
+adminDetailsName: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: '#1E293B',
+  flex: 1,
+},
+adminDetailsNameTablet: {
+  fontSize: 24,
+},
+adminDetailsUsername: {
+  fontSize: 14,
+  color: '#64748B',
+  marginBottom: 8,
+},
+adminHeaderMeta: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  flexWrap: 'wrap',
+},
+adminHeaderMetaItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 4,
+},
+adminHeaderMetaText: {
+  fontSize: 12,
+  color: '#64748B',
+},
+statusBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 12,
+  gap: 4,
+},
+activeStatusBadge: {
+  backgroundColor: '#D1FAE5',
+},
+inactiveStatusBadge: {
+  backgroundColor: '#FEE2E2',
+},
+statusBadgeText: {
+  fontSize: 11,
+  fontWeight: '600',
+},
+activeStatusBadgeText: {
+  color: '#065F46',
+},
+inactiveStatusBadgeText: {
+  color: '#991B1B',
+},
+roleBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 8,
+  paddingVertical: 4,
+  borderRadius: 12,
+  gap: 4,
+  alignSelf: 'flex-start',
+},
+roleBadgeText: {
+  fontSize: 11,
+  fontWeight: '600',
+},
+adminDetailsActions: {
+  flexDirection: 'row',
+  gap: 8,
+  marginBottom: 20,
+},
+adminDetailsActionButton: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 10,
+  borderRadius: 10,
+  gap: 6,
+  borderWidth: 1,
+},
+editActionButton: {
+  backgroundColor: '#F5F3FF',
+  borderColor: '#EDE9FE',
+},
+phoneActionButton: {
+  backgroundColor: '#F1F5F9',
+  borderColor: '#E2E8F0',
+},
+mpinActionButton: {
+  backgroundColor: '#FEF3C7',
+  borderColor: '#FDE68A',
+},
+adminDetailsActionText: {
+  fontSize: 12,
+  fontWeight: '600',
+},
+adminInfoSection: {
+  marginBottom: 20,
+},
+adminInfoGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 12,
+  marginTop: 8,
+},
+adminInfoItem: {
+  width: '48%',
+  marginBottom: 12,
+},
+adminInfoLabel: {
+  fontSize: 12,
+  color: '#64748B',
+  marginBottom: 4,
+},
+adminInfoValue: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#1E293B',
+},
+section1Header: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 12,
+},
+permissionActionText: {
+  fontSize: 12,
+  color: '#64748B',
+  marginTop: 4,
+  lineHeight: 16,
+},
+sectionHeaderRight: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+},
+additionalActions: {
+  flexDirection: 'row',
+  gap: 8,
+  marginTop: 20,
+},
+additionalActionButton: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 10,
+  borderRadius: 10,
+  gap: 6,
+  borderWidth: 1,
+},
+hierarchyActionButton: {
+  backgroundColor: '#F5F3FF',
+  borderColor: '#EDE9FE',
+},
+reportsToActionButton: {
+  backgroundColor: '#F1F5F9',
+  borderColor: '#E2E8F0',
+},
+deactivateActionButton: {
+  backgroundColor: '#FEE2E2',
+  borderColor: '#FECACA',
+},
+activateActionButton: {
+  backgroundColor: '#D1FAE5',
+  borderColor: '#A7F3D0',
+},
+additionalActionText: {
+  fontSize: 12,
+  fontWeight: '600',
+},
+
+// Phone Modal Styles
+phoneModalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 16,
+},
+phoneModalContent: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 20,
+  maxHeight: height * 0.9,
+  width: '100%',
+},
+phoneModalContentTablet: {
+  maxHeight: height * 0.9,
+  width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
+},
+phoneModalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#E2E8F0',
+},
+phoneModalTitle: {
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#1E293B',
+},
+phoneModalTitleTablet: {
+  fontSize: 24,
+},
+phoneModalSubtitle: {
+  fontSize: 14,
+  color: '#64748B',
+  marginTop: 2,
+},
+phoneModalSubtitleTablet: {
+  fontSize: 16,
+  marginTop: 4,
+},
+phoneModalBody: {
+  padding: 20,
+  maxHeight: height * 0.7,
+},
+phoneModalSafeFooter: {
+  backgroundColor: '#FFFFFF',
+},
+phoneModalFooter: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  paddingHorizontal: 20,
+  paddingTop: 16,
+  paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+  gap: 12,
+},
+phoneInfoCard: {
+  flexDirection: 'row',
+  backgroundColor: '#F5F3FF',
+  borderWidth: 1,
+  borderColor: '#EDE9FE',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+  gap: 12,
+},
+phoneInfoContent: {
+  flex: 1,
+},
+phoneInfoTitle: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#1E293B',
+  marginBottom: 4,
+},
+phoneInfoNumber: {
+  fontSize: 16,
+  fontWeight: '700',
+  color: '#8B5CF6',
+  marginBottom: 4,
+},
+phoneInfoNote: {
+  fontSize: 12,
+  color: '#64748B',
+  lineHeight: 16,
+},
+
+// MPIN Modal Styles
+mpinModalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 16,
+},
+mpinModalContent: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 20,
+  maxHeight: height * 0.9,
+  width: '100%',
+},
+mpinModalContentTablet: {
+  maxHeight: height * 0.9,
+  width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
+},
+mpinModalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#E2E8F0',
+},
+mpinModalTitle: {
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#1E293B',
+},
+mpinModalTitleTablet: {
+  fontSize: 24,
+},
+mpinModalSubtitle: {
+  fontSize: 14,
+  color: '#64748B',
+  marginTop: 2,
+},
+mpinModalSubtitleTablet: {
+  fontSize: 16,
+  marginTop: 4,
+},
+mpinModalBody: {
+  padding: 20,
+  maxHeight: height * 0.7,
+},
+mpinModalSafeFooter: {
+  backgroundColor: '#FFFFFF',
+},
+mpinModalFooter: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  paddingHorizontal: 20,
+  paddingTop: 16,
+  paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+  gap: 12,
+},
+
+// Reports To Modal Styles
+reportsToModalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 16,
+},
+reportsToModalContent: {
+  backgroundColor: '#FFFFFF',
+  borderRadius: 20,
+  maxHeight: height * 0.9,
+  width: '100%',
+},
+reportsToModalContentTablet: {
+  maxHeight: height * 0.9,
+  width: isLargeTablet ? '70%' : (isTablet ? '80%' : '100%'),
+},
+reportsToModalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#E2E8F0',
+},
+reportsToModalTitle: {
+  fontSize: 18,
+  fontWeight: '700',
+  color: '#1E293B',
+},
+reportsToModalTitleTablet: {
+  fontSize: 24,
+},
+reportsToModalSubtitle: {
+  fontSize: 14,
+  color: '#64748B',
+  marginTop: 2,
+},
+reportsToModalSubtitleTablet: {
+  fontSize: 16,
+  marginTop: 4,
+},
+reportsToModalBody: {
+  padding: 20,
+  maxHeight: height * 0.7,
+},
+reportsToModalSafeFooter: {
+  backgroundColor: '#FFFFFF',
+},
+reportsToModalFooter: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  paddingHorizontal: 20,
+  paddingTop: 16,
+  paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+  gap: 12,
+},
+currentManagerCard: {
+  flexDirection: 'row',
+  backgroundColor: '#F5F3FF',
+  borderWidth: 1,
+  borderColor: '#EDE9FE',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+  gap: 12,
+},
+currentManagerContent: {
+  flex: 1,
+},
+currentManagerTitle: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#1E293B',
+  marginBottom: 4,
+},
+currentManagerName: {
+  fontSize: 16,
+  fontWeight: '700',
+  color: '#8B5CF6',
+  marginBottom: 4,
+},
+currentManagerNote: {
+  fontSize: 12,
+  color: '#64748B',
+  lineHeight: 16,
+},
+noManagerCard: {
+  flexDirection: 'row',
+  backgroundColor: '#F8FAFC',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+  gap: 12,
+},
+noManagerContent: {
+  flex: 1,
+},
+noManagerTitle: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#1E293B',
+  marginBottom: 4,
+},
+noManagerText: {
+  fontSize: 12,
+  color: '#64748B',
+  lineHeight: 16,
+},
+managerSearch: {
+  marginBottom: 12,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  borderRadius: 8,
+},
+managerSearchInput: {
+  marginLeft: 8,
+  marginRight: 8,
+  fontSize: 14,
+},
+noManagerOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  backgroundColor: '#F8FAFC',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 10,
+  padding: 12,
+  marginBottom: 8,
+  gap: 12,
+},
+noManagerOptionSelected: {
+  backgroundColor: '#F5F3FF',
+  borderColor: '#8B5CF6',
+},
+noManagerOptionText: {
+  flex: 1,
+  fontSize: 14,
+  color: '#1E293B',
+  fontWeight: '500',
+},
+noManagerOptionTextSelected: {
+  color: '#8B5CF6',
+  fontWeight: '600',
+},
+managerItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F8FAFC',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  marginBottom: 8,
+},
+managerItemTablet: {
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+},
+managerItemSelected: {
+  backgroundColor: '#F5F3FF',
+  borderColor: '#8B5CF6',
+},
+currentManagerItem: {
+  borderColor: '#10B981',
+},
+manager1IconContainer: {
+  marginRight: 12,
+},
+managerTextContainer: {
+  flex: 1,
+  marginRight: 12,
+},
+managerName: {
+  fontSize: 14,
+  color: '#64748B',
+  fontWeight: '500',
+  marginBottom: 2,
+},
+managerNameTablet: {
+  fontSize: 16,
+},
+managerNameSelected: {
+  color: '#8B5CF6',
+  fontWeight: '600',
+},
+current1ManagerName: {
+  fontWeight: '600',
+},
+managerRole: {
+  fontSize: 12,
+  color: '#94A3B8',
+  marginBottom: 4,
+},
+managerRoleTablet: {
+  fontSize: 13,
+},
+managerMeta: {
+  flexDirection: 'row',
+  gap: 4,
+},
+currentBadgeSmall: {
+  backgroundColor: '#10B981',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+},
+currentBadgeTextSmall: {
+  color: '#FFFFFF',
+  fontSize: 10,
+  fontWeight: '600',
+},
+activeBadgeSmall: {
+  backgroundColor: '#D1FAE5',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+},
+activeBadgeTextSmall: {
+  color: '#065F46',
+  fontSize: 10,
+  fontWeight: '600',
+},
+inactiveBadgeSmall: {
+  backgroundColor: '#FEE2E2',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+},
+inactiveBadgeTextSmall: {
+  color: '#991B1B',
+  fontSize: 10,
+  fontWeight: '600',
+},
+noManagers: {
+  alignItems: 'center',
+  paddingVertical: 20,
+},
+noManagersText: {
+  fontSize: 12,
+  color: '#94A3B8',
+  marginTop: 8,
+  textAlign: 'center',
+},
+
+// Common Modal Styles
+infoCard: {
+  flexDirection: 'row',
+  backgroundColor: '#F0F9FF',
+  borderRadius: 10,
+  padding: 16,
+  marginBottom: 20,
+  gap: 12,
+  borderWidth: 1,
+  borderColor: '#E0F2FE',
+},
+infoContent: {
+  flex: 1,
+},
+infoTitle: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#0369A1',
+  marginBottom: 4,
+},
+infoText: {
+  fontSize: 12,
+  color: '#0369A1',
+  lineHeight: 16,
+},
+
+
+});
 export default styles;

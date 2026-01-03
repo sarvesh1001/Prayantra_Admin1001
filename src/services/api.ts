@@ -436,13 +436,210 @@ class ApiService {
     );
   }
 
+
+  // In api.ts - Add to the existing ApiService class
+
+/* ============================================================
+   ADMIN USER MANAGEMENT APIs
+   ============================================================ */
+
+  // Create Admin User
+  async createAdmin(adminData: any) {
+    const device = await getStoredDeviceInfo();
+    return this.api.post('/admin/admins', adminData, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get All Admins (with pagination)
+  async getAllAdmins(params?: { limit?: number; offset?: number }) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/all', {
+      params,
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin by ID
+  async getAdminById(adminId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get(`/admin/admins/${adminId}`, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin with Details
+  async getAdminWithDetails(adminId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get(`/admin/admins/${adminId}/details`, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Update Admin User
+  async updateAdmin(adminId: string, updateData: any) {
+    const device = await getStoredDeviceInfo();
+    return this.api.put(`/admin/admins/${adminId}`, updateData, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Update Admin Role
+  async updateAdminRole(adminId: string, newRoleId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.put(`/admin/admins/${adminId}/role`, {
+      new_role_id: newRoleId,
+    }, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Update Admin Reports To
+  async updateAdminReportsTo(adminId: string, reportsTo: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.put(`/admin/admins/${adminId}/reports-to`, {
+      reports_to: reportsTo,
+    }, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Activate Admin
+  async activateAdmin(adminId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.post(`/admin/admins/${adminId}/activate`, {}, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Deactivate Admin
+  async deactivateAdmin(adminId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.post(`/admin/admins/${adminId}/deactivate`, {}, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Change Admin Phone (Owner Only)
+  async changeAdminPhone(adminId: string, newPhone: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.put(`/admin/admins/${adminId}/phone`, {
+      new_phone: newPhone,
+    }, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin Phone Number
+  async getAdminPhone(adminId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get(`/admin/admins/${adminId}/phone`, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Change Admin MPIN by Admin
+  async changeAdminMPIN(adminId: string, newMPIN: string, reason: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.post('/admin/mpin/change-by-admin', {
+      admin_id: adminId,
+      new_mpin: newMPIN,
+      reason: reason,
+    }, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Search Admins
+  async searchAdmins(query: string, params?: { limit?: number; offset?: number }) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/search', {
+      params: { q: query, ...params },
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Advanced Admin Search
+  async searchAdminsAdvanced(params: {
+    q?: string;
+    role_id?: string;
+    created_after?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/search/advanced', {
+      params,
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Search Admins by Name
+  async searchAdminsByName(name: string, params?: { limit?: number; offset?: number }) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/search/name', {
+      params: { name, ...params },
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin Suggestions
+  async getAdminSuggestions(prefix: string, limit: number = 10) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/search/suggestions', {
+      params: { prefix, limit },
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Available Managers
+  async getAvailableManagers(excludeId?: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/available-managers', {
+      params: { exclude_id: excludeId },
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin Hierarchy
+  async getAdminHierarchy(adminId: string) {
+    const device = await getStoredDeviceInfo();
+    return this.api.get(`/admin/admins/${adminId}/hierarchy`, {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin Stats
+  async getAdminStats() {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/stats', {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
+
+  // Get Admin Search Analytics
+  async getAdminSearchAnalytics() {
+    const device = await getStoredDeviceInfo();
+    return this.api.get('/admin/admins/search/analytics', {
+      headers: { 'X-Device-ID': device.deviceId },
+    });
+  }
   async removeDepartmentFromRole(roleId: string, deptId: string) {
     const device = await getStoredDeviceInfo();
     return this.api.delete(`/admin/roles/${roleId}/departments/${deptId}`, {
       headers: { 'X-Device-ID': device.deviceId },
     });
   }
-
+  // Delete Admin
+    async deleteAdmin(adminId: string) {
+      const device = await getStoredDeviceInfo();
+      return this.api.delete(`/admin/admins/${adminId}`, {
+        headers: {
+          'X-Device-ID': device.deviceId,
+        },
+      });
+    }
+    
   async deleteRole(roleId: string) {
     const device = await getStoredDeviceInfo();
     return this.api.delete(`/admin/roles/${roleId}`, {
