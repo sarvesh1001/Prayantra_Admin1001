@@ -444,19 +444,19 @@ const CompanyManagementScreen = () => {
     }
   };
 
-  // Fetch admin phone
-  const fetchAdminPhone = async (admin: Admin) => {
-    try {
-      const response = await api.getAdminPhone(admin.admin_id);
-      const data = response.data;
-      setSelectedAdminPhone(data.data);
-      setSelectedAdmin(admin);
-      setIsPhoneModalVisible(true);
-    } catch (error: any) {
-      console.error('Error fetching admin phone:', error);
-      showToast('error', error.response?.data?.message || 'Failed to load phone number');
-    }
-  };
+  // // Fetch admin phone
+  // const fetchAdminPhone = async (admin: Admin) => {
+  //   try {
+  //     const response = await api.getAdminPhone(admin.admin_id);
+  //     const data = response.data;
+  //     setSelectedAdminPhone(data.data);
+  //     setSelectedAdmin(admin);
+  //     setIsPhoneModalVisible(true);
+  //   } catch (error: any) {
+  //     console.error('Error fetching admin phone:', error);
+  //     showToast('error', error.response?.data?.message || 'Failed to load phone number');
+  //   }
+  // };
 
   // Fetch admin hierarchy
   const fetchAdminHierarchy = async (admin: Admin) => {
@@ -575,11 +575,26 @@ const CompanyManagementScreen = () => {
     }
   };
 
-  const handleChangePhone = (admin: Admin) => {
-    setSelectedAdmin(admin);
-    setIsPhoneModalVisible(true);
+  const handleChangePhone = async (admin: Admin) => {
+    try {
+      setSelectedAdmin(admin);
+      setSelectedAdminPhone(null); // reset old state
+  
+      const response = await api.getAdminPhone(admin.admin_id);
+  
+      console.log('PHONE API:', response.data.data);
+  
+      setSelectedAdminPhone(response.data.data);
+      setIsPhoneModalVisible(true);
+    } catch (error: any) {
+      console.error('Error fetching admin phone:', error);
+      showToast(
+        'error',
+        error.response?.data?.message || 'Failed to load phone number'
+      );
+    }
   };
-
+  
   const handleChangeMPIN = (admin: Admin) => {
     setSelectedAdmin(admin);
     setIsMPINModalVisible(true);

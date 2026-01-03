@@ -38,6 +38,7 @@ import AdminCard from './AdminCard';
 import PhoneChangeModal from './PhoneChangeModal';
 import MPINChangeModal from './MPINChangeModal';
 import ReportsToModal from './ReportsToModal';
+const [loadingPhone, setLoadingPhone] = useState(false);
 
 const { width } = Dimensions.get('window');
 const isTablet = width >= 768;
@@ -279,19 +280,19 @@ const AdminManagementScreen = () => {
     }
   };
 
-  // Fetch admin phone
-  const fetchAdminPhone = async (admin: Admin) => {
-    try {
-      const response = await api.getAdminPhone(admin.admin_id);
-      const data = response.data;
-      setSelectedAdminPhone(data.data);
-      setSelectedAdmin(admin);
-      setIsPhoneModalVisible(true);
-    } catch (error: any) {
-      console.error('Error fetching admin phone:', error);
-      showToast('error', error.response?.data?.message || 'Failed to load phone number');
-    }
-  };
+  // // Fetch admin phone
+  // const fetchAdminPhone = async (admin: Admin) => {
+  //   try {
+  //     const response = await api.getAdminPhone(admin.admin_id);
+  //     const data = response.data;
+  //     setSelectedAdminPhone(data.data);
+  //     setSelectedAdmin(admin);
+  //     setIsPhoneModalVisible(true);
+  //   } catch (error: any) {
+  //     console.error('Error fetching admin phone:', error);
+  //     showToast('error', error.response?.data?.message || 'Failed to load phone number');
+  //   }
+  // };
 
   // Fetch admin hierarchy
   const fetchAdminHierarchy = async (admin: Admin) => {
@@ -361,11 +362,29 @@ const AdminManagementScreen = () => {
     }
   };
 
-  const handleChangePhone = (admin: Admin) => {
-    setSelectedAdmin(admin);
-    setIsPhoneModalVisible(true);
+  const handleChangePhone = async (admin: Admin) => {
+    try {
+      setLoadingPhone(true);
+      setSelectedAdmin(admin);
+      setSelectedAdminPhone(null); // reset old data
+  
+      const response = await api.getAdminPhone(admin.admin_id);
+  
+      console.log('PHONE API:', response.data.data);
+  
+      setSelectedAdminPhone(response.data.data);
+      setIsPhoneModalVisible(true);
+    } catch (error: any) {
+      console.error('Error fetching admin phone:', error);
+      showToast(
+        'error',
+        error.response?.data?.message || 'Failed to load phone number'
+      );
+    } finally {
+      setLoadingPhone(false);
+    }
   };
-
+  
   const handleChangeMPIN = (admin: Admin) => {
     setSelectedAdmin(admin);
     setIsMPINModalVisible(true);
@@ -674,18 +693,18 @@ const AdminManagementScreen = () => {
         onViewHierarchy={() => selectedAdmin && fetchAdminHierarchy(selectedAdmin)}
       />
 
-      <PhoneChangeModal
-        visible={isPhoneModalVisible}
-        onClose={() => {
-          setIsPhoneModalVisible(false);
-          setSelectedAdmin(null);
-          setSelectedAdminPhone(null);
-        }}
-        admin={selectedAdmin}
-        currentPhone={selectedAdminPhone?.phone_number}
-        onChange={changeAdminPhoneMutation.mutate}
-        isChanging={changeAdminPhoneMutation.isPending}
-      />
+    <PhoneChangeModal
+      visible={isPhoneModalVisible && !!selectedAdminPhone}
+      onClose={() => {
+        setIsPhoneModalVisible(false);
+        setSelectedAdmin(null);
+        setSelectedAdminPhone(null);
+      }}
+      admin={selectedAdmin}
+      currentPhone={selectedAdminPhone?.phone_number}
+      onChange={changeAdminPhoneMutation.mutate}
+      isChanging={changeAdminPhoneMutation.isPending}
+    />
 
       <MPINChangeModal
         visible={isMPINModalVisible}
