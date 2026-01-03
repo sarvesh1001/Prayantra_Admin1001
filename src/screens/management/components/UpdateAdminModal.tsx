@@ -1,4 +1,3 @@
-// components/UpdateAdminModal.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -29,6 +28,8 @@ interface UpdateAdminModalProps {
   onUpdate: (adminId: string, data: any) => void;
   isUpdating: boolean;
   availableManagers: Admin[];
+  onUpdateRole: (adminId: string, newRoleId: string) => void;
+  isUpdatingRole: boolean;
 }
 
 const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
@@ -38,6 +39,8 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
   onUpdate,
   isUpdating,
   availableManagers,
+  onUpdateRole,
+  isUpdatingRole,
 }) => {
   const { showToast } = useToast();
   const [username, setUsername] = useState('');
@@ -97,7 +100,6 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
 
       // Load role details
       const roleResponse = await api.getAllRoles({ limit: 100, offset: 0 });
-
       const roles: Role[] = roleResponse.data?.data?.roles ?? [];
       
       const adminRole = roles.find(
@@ -107,7 +109,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
       if (adminRole) {
         setSelectedRole(adminRole);
       }
-          } catch (error) {
+    } catch (error) {
       console.error('Error loading admin details:', error);
       showToast('error', 'Failed to load admin details');
     } finally {
@@ -130,29 +132,50 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!admin || !username.trim() || !fullName.trim()) {
       Alert.alert('Error', 'Username and full name are required');
       return;
     }
 
-    const updateData: any = {
-      username: username.trim(),
-      full_name: fullName.trim(),
-    };
+    try {
+      // Update role separately if changed (using correct API)
+      if (selectedRole && selectedRole.admin_role_id !== admin.admin_role_id) {
+        await onUpdateRole(admin.admin_id, selectedRole.admin_role_id);
+      }
 
-    if (selectedRole && selectedRole.admin_role_id !== admin.admin_role_id) {
-      updateData.new_role_id = selectedRole.admin_role_id;
+      // Prepare profile update data (without role info)
+      const updateData: any = {
+        username: username.trim(),
+        full_name: fullName.trim(),
+      };
+
+      if (reportsTo !== admin.reports_to) {
+        updateData.reports_to = reportsTo || null;
+      }
+
+      // Only update profile if there are changes
+      const hasProfileChanges = 
+        username !== admin.username || 
+        fullName !== admin.full_name || 
+        reportsTo !== admin.reports_to;
+      
+      if (hasProfileChanges) {
+        await onUpdate(admin.admin_id, updateData);
+      }
+
+      // Show success message
+      showToast('success', 'Admin updated successfully');
+      onClose();
+    } catch (error: any) {
+      console.error('Update admin error:', error);
+      showToast('error', error.response?.data?.message || 'Failed to update admin');
     }
-
-    if (reportsTo !== admin.reports_to) {
-      updateData.reports_to = reportsTo || null;
-    }
-
-    onUpdate(admin.admin_id, updateData);
   };
 
   if (!admin) return null;
+
+  const isSubmitting = isUpdating || isUpdatingRole;
 
   return (
     <Modal
@@ -173,7 +196,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                 @{admin.username} • {admin.is_active ? 'Active' : 'Inactive'}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} disabled={isUpdating || loadingAdminDetails}>
+            <TouchableOpacity onPress={onClose} disabled={isSubmitting || loadingAdminDetails}>
               <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
             </TouchableOpacity>
           </View>
@@ -213,7 +236,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                     placeholder="Enter username"
                     placeholderTextColor="#94A3B8"
                     autoCapitalize="none"
-                    editable={!isUpdating}
+                    editable={!isSubmitting}
                   />
                 </View>
 
@@ -230,7 +253,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                     onChangeText={setFullName}
                     placeholder="Enter full name"
                     placeholderTextColor="#94A3B8"
-                    editable={!isUpdating}
+                    editable={!isSubmitting}
                   />
                 </View>
 
@@ -252,7 +275,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                       placeholderTextColor="#94A3B8"
                       value={searchQuery}
                       onChangeText={setSearchQuery}
-                      editable={!isUpdating}
+                      editable={!isSubmitting}
                     />
                     {searchQuery.length > 0 && (
                       <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -278,7 +301,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                             admin.admin_role_id === role.admin_role_id && styles.currentRoleOption,
                           ]}
                           onPress={() => setSelectedRole(role)}
-                          disabled={isUpdating}
+                          disabled={isSubmitting}
                         >
                           <View style={styles.roleOptionContent}>
                             <View style={styles.roleOptionHeader}>
@@ -345,7 +368,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                         !reportsTo && styles.reportsToOptionSelected,
                       ]}
                       onPress={() => setReportsTo('')}
-                      disabled={isUpdating}
+                      disabled={isSubmitting}
                     >
                       <MaterialCommunityIcons
                         name="account"
@@ -370,7 +393,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                             reportsTo === manager.admin_id && styles.reportsToOptionSelected,
                           ]}
                           onPress={() => setReportsTo(manager.admin_id)}
-                          disabled={isUpdating}
+                          disabled={isSubmitting}
                         >
                           <MaterialCommunityIcons
                             name="account-tie"
@@ -435,7 +458,7 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
               <TouchableOpacity
                 style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
                 onPress={onClose}
-                disabled={isUpdating}
+                disabled={isSubmitting}
               >
                 <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
                   Cancel
@@ -445,13 +468,13 @@ const UpdateAdminModal: React.FC<UpdateAdminModalProps> = ({
                 style={[
                   styles.submitButton,
                   isTablet && styles.submitButtonTablet,
-                  isUpdating && styles.submitButtonDisabled,
+                  isSubmitting && styles.submitButtonDisabled,
                   (!username.trim() || !fullName.trim()) && styles.submitButtonDisabled,
                 ]}
                 onPress={handleSubmit}
-                disabled={isUpdating || !username.trim() || !fullName.trim()}
+                disabled={isSubmitting || !username.trim() || !fullName.trim()}
               >
-                {isUpdating ? (
+                {isSubmitting ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>

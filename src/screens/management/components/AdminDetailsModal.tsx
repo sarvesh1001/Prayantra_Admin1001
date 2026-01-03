@@ -1,4 +1,3 @@
-// components/AdminDetailsModal.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -16,7 +15,7 @@ import { AdminDetails } from '@/types';
 import styles from '../styles';
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const isTablet = width >= 768;
 
 interface AdminDetailsModalProps {
@@ -84,7 +83,6 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
     const roleInfo = roleColors[admin.role_type as keyof typeof roleColors] || roleColors[2];
     
     return (
-        
       <View style={[styles.roleBadge, { backgroundColor: roleInfo.bg }]}>
         <MaterialCommunityIcons
           name={roleInfo.icon}
@@ -123,9 +121,11 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
               <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
             </TouchableOpacity>
           </View>
+          
           <ScrollView
             style={styles.adminDetailsModalBody}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 100 }}
           >
             {isLoading ? (
               <ActivityIndicator size="large" color="#8B5CF6" style={styles.detailsLoader} />
@@ -175,9 +175,23 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
                 </View>
 
                 {/* Action Buttons */}
-                <View style={styles.adminDetailsActions}>
+                <View style={[styles.adminDetailsActions, { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }]}>
                   <TouchableOpacity
-                    style={[styles.adminDetailsActionButton, styles.editActionButton]}
+                    style={[
+                      styles.adminDetailsActionButton,
+                      styles.editActionButton,
+                      { 
+                        flex: 1,
+                        minWidth: 100,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        gap: 6,
+                        borderWidth: 1,
+                      }
+                    ]}
                     onPress={onEdit}
                   >
                     <MaterialCommunityIcons name="pencil" size={16} color="#8B5CF6" />
@@ -187,7 +201,21 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
                   </TouchableOpacity>
                   
                   <TouchableOpacity
-                    style={[styles.adminDetailsActionButton, styles.phoneActionButton]}
+                    style={[
+                      styles.adminDetailsActionButton,
+                      styles.phoneActionButton,
+                      { 
+                        flex: 1,
+                        minWidth: 100,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        gap: 6,
+                        borderWidth: 1,
+                      }
+                    ]}
                     onPress={onChangePhone}
                   >
                     <MaterialCommunityIcons name="phone" size={16} color="#64748B" />
@@ -197,7 +225,21 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
                   </TouchableOpacity>
                   
                   <TouchableOpacity
-                    style={[styles.adminDetailsActionButton, styles.mpinActionButton]}
+                    style={[
+                      styles.adminDetailsActionButton,
+                      styles.mpinActionButton,
+                      { 
+                        flex: 1,
+                        minWidth: 100,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        gap: 6,
+                        borderWidth: 1,
+                      }
+                    ]}
                     onPress={onChangeMPIN}
                   >
                     <MaterialCommunityIcons name="shield-key" size={16} color="#F59E0B" />
@@ -333,9 +375,23 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
                 </View>
 
                 {/* Additional Actions */}
-                <View style={styles.additionalActions}>
+                <View style={[styles.additionalActions, { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 }]}>
                   <TouchableOpacity
-                    style={[styles.additionalActionButton, styles.hierarchyActionButton]}
+                    style={[
+                      styles.additionalActionButton,
+                      styles.hierarchyActionButton,
+                      { 
+                        flex: 1,
+                        minWidth: 100,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        gap: 6,
+                        borderWidth: 1,
+                      }
+                    ]}
                     onPress={onViewHierarchy}
                   >
                     <MaterialCommunityIcons name="sitemap" size={16} color="#8B5CF6" />
@@ -345,7 +401,21 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
                   </TouchableOpacity>
                   
                   <TouchableOpacity
-                    style={[styles.additionalActionButton, styles.reportsToActionButton]}
+                    style={[
+                      styles.additionalActionButton,
+                      styles.reportsToActionButton,
+                      { 
+                        flex: 1,
+                        minWidth: 100,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        gap: 6,
+                        borderWidth: 1,
+                      }
+                    ]}
                     onPress={onUpdateReportsTo}
                   >
                     <MaterialCommunityIcons name="account-arrow-right" size={16} color="#64748B" />
@@ -358,6 +428,17 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
                     style={[
                       styles.additionalActionButton,
                       admin.is_active ? styles.deactivateActionButton : styles.activateActionButton,
+                      { 
+                        flex: 1,
+                        minWidth: 100,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        gap: 6,
+                        borderWidth: 1,
+                      }
                     ]}
                     onPress={onToggleStatus}
                   >
@@ -377,6 +458,7 @@ const AdminDetailsModal: React.FC<AdminDetailsModalProps> = ({
               </>
             )}
           </ScrollView>
+          
           <SafeAreaView edges={['bottom']} style={styles.adminDetailsModalSafeFooter}>
             <View style={styles.adminDetailsModalFooter}>
               <TouchableOpacity

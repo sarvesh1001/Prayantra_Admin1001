@@ -1,4 +1,3 @@
-// components/AdminManagementScreen.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -148,19 +147,31 @@ const AdminManagementScreen = () => {
     },
   });
 
-  // Update admin mutation
-  const updateAdminMutation = useMutation({
+  // Update admin profile mutation (does NOT include role update)
+  const updateAdminProfileMutation = useMutation({
     mutationFn: ({ adminId, data }: { adminId: string; data: UpdateAdminRequest }) =>
       api.updateAdmin(adminId, data),
     onSuccess: (response, variables) => {
       queryClient.invalidateQueries({ queryKey: ['allAdmins'] });
-      setIsUpdateModalVisible(false);
-      setSelectedAdmin(null);
-      showToast('success', response.data?.message || 'Admin updated successfully');
+      showToast('success', response.data?.message || 'Admin profile updated successfully');
     },
     onError: (error: any) => {
-      console.error('Update admin error:', error);
-      showToast('error', error.response?.data?.message || 'Failed to update admin');
+      console.error('Update admin profile error:', error);
+      showToast('error', error.response?.data?.message || 'Failed to update admin profile');
+    },
+  });
+
+  // Update admin role mutation (uses separate API)
+  const updateAdminRoleMutation = useMutation({
+    mutationFn: ({ adminId, newRoleId }: { adminId: string; newRoleId: string }) =>
+      api.updateAdminRole(adminId, newRoleId),
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['allAdmins'] });
+      showToast('success', response.data?.message || 'Admin role updated successfully');
+    },
+    onError: (error: any) => {
+      console.error('Update admin role error:', error);
+      showToast('error', error.response?.data?.message || 'Failed to update admin role');
     },
   });
 
@@ -372,8 +383,12 @@ const AdminManagementScreen = () => {
     createAdminMutation.mutate(adminData);
   };
 
-  const handleUpdateAdmin = (adminId: string, data: UpdateAdminRequest) => {
-    updateAdminMutation.mutate({ adminId, data });
+  const handleUpdateAdminProfile = (adminId: string, data: UpdateAdminRequest) => {
+    updateAdminProfileMutation.mutate({ adminId, data });
+  };
+
+  const handleUpdateAdminRole = async (adminId: string, newRoleId: string) => {
+    return updateAdminRoleMutation.mutateAsync({ adminId, newRoleId });
   };
 
   const handleSearch = () => {
@@ -635,9 +650,11 @@ const AdminManagementScreen = () => {
           setSelectedAdmin(null);
         }}
         admin={selectedAdmin}
-        onUpdate={handleUpdateAdmin}
-        isUpdating={updateAdminMutation.isPending}
+        onUpdate={handleUpdateAdminProfile}
+        isUpdating={updateAdminProfileMutation.isPending}
         availableManagers={availableManagersData?.data || []}
+        onUpdateRole={handleUpdateAdminRole}
+        isUpdatingRole={updateAdminRoleMutation.isPending}
       />
 
       <AdminDetailsModal

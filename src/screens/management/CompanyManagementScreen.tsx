@@ -637,7 +637,27 @@ const CompanyManagementScreen = () => {
 
 const managerRoles =
   rolesData?.data?.roles?.filter((r: Role) => r.role_type === 2).length || 0;
-
+  const updateAdminRoleMutation = useMutation({
+    mutationFn: ({ adminId, newRoleId }: { adminId: string; newRoleId: string }) =>
+      api.updateAdminRole(adminId, newRoleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allAdmins'] });
+      showToast('success', 'Admin role updated successfully');
+    },
+    onError: (error: any) => {
+      showToast(
+        'error',
+        error.response?.data?.message || 'Failed to update admin role'
+      );
+    },
+  });
+  const handleUpdateAdminRole = async (
+    adminId: string,
+    newRoleId: string
+  ) => {
+    await updateAdminRoleMutation.mutateAsync({ adminId, newRoleId });
+  };
+    
 const superAdminRoles =
   rolesData?.data?.roles?.filter((r: Role) => r.role_type === 4).length || 0;
 
@@ -1074,8 +1094,15 @@ const superAdminRoles =
           setSelectedAdmin(null);
         }}
         admin={selectedAdmin}
+
+        // profile update
         onUpdate={handleUpdateAdmin}
         isUpdating={updateAdminMutation.isPending}
+
+        // role update (REQUIRED)
+        onUpdateRole={handleUpdateAdminRole}
+        isUpdatingRole={updateAdminRoleMutation.isPending}
+
         availableManagers={availableManagersData?.data || []}
       />
 

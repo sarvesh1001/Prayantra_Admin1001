@@ -1,5 +1,4 @@
-// components/PhoneChangeModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,8 +22,8 @@ interface PhoneChangeModalProps {
   visible: boolean;
   onClose: () => void;
   admin: Admin | null;
-  currentPhone: string | undefined;
-  onChange: ({ adminId, newPhone }: { adminId: string; newPhone: string }) => void;
+  currentPhone?: string;
+  onChange: (payload: { adminId: string; newPhone: string }) => void;
   isChanging: boolean;
 }
 
@@ -40,28 +39,23 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
   const [confirmPhone, setConfirmPhone] = useState('');
   const [reason, setReason] = useState('');
 
-  const resetForm = () => {
-    setNewPhone('');
-    setConfirmPhone('');
-    setReason('');
-  };
-
-  const handleClose = () => {
-    if (!isChanging) {
-      resetForm();
-      onClose();
+  useEffect(() => {
+    if (!visible) {
+      setNewPhone('');
+      setConfirmPhone('');
+      setReason('');
     }
-  };
+  }, [visible]);
+
+  if (!admin) return null;
 
   const handleSubmit = () => {
-    if (!admin) return;
-
     if (!newPhone.trim()) {
       Alert.alert('Error', 'New phone number is required');
       return;
     }
 
-    if (newPhone !== confirmPhone) {
+    if (newPhone.trim() !== confirmPhone.trim()) {
       Alert.alert('Error', 'Phone numbers do not match');
       return;
     }
@@ -71,57 +65,53 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
       return;
     }
 
-    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-    if (!phoneRegex.test(newPhone.replace(/\D/g, ''))) {
-      Alert.alert('Error', 'Please enter a valid phone number');
+    /**
+     * ✅ E.164 VALIDATION
+     * Examples:
+     * +919315453437
+     * +14155552671
+     */
+    const phoneRegex = /^\+[1-9]\d{9,14}$/;
+
+    if (!phoneRegex.test(newPhone.trim())) {
+      Alert.alert(
+        'Invalid Phone Number',
+        'Enter phone number in international format.\nExample: +919315453437'
+      );
       return;
     }
 
     Alert.alert(
       'Confirm Phone Change',
-      `Are you sure you want to change ${admin.full_name}'s phone number?\n\nFrom: ${currentPhone || 'Not available'}\nTo: ${newPhone}`,
+      `Are you sure you want to change ${admin.full_name}'s phone number?\n\nFrom: ${
+        currentPhone || 'Not available'
+      }\nTo: ${newPhone}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Change Phone',
           style: 'destructive',
-          onPress: () => {
-            onChange({ adminId: admin.admin_id, newPhone: newPhone.trim() });
-          },
+          onPress: () =>
+            onChange({
+              adminId: admin.admin_id,
+              newPhone: newPhone.trim(),
+            }),
         },
       ]
     );
   };
 
-  const formatPhoneNumber = (text: string) => {
-    const cleaned = text.replace(/\D/g, '');
-    
-    if (cleaned.length <= 3) {
-      return cleaned;
-    } else if (cleaned.length <= 6) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
-    } else {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
-    }
-  };
-
-  const handlePhoneChange = (text: string, setter: (value: string) => void) => {
-    const formatted = formatPhoneNumber(text);
-    setter(formatted);
-  };
-
-  if (!admin) return null;
-
   return (
     <Modal
       visible={visible}
       animationType="fade"
-      transparent={true}
-      onRequestClose={handleClose}
-      statusBarTranslucent={true}
+      transparent
+      statusBarTranslucent
+      onRequestClose={onClose}
     >
       <View style={styles.phoneModalOverlay}>
         <View style={[styles.phoneModalContent, isTablet && styles.phoneModalContentTablet]}>
+          {/* Header */}
           <View style={styles.phoneModalHeader}>
             <View>
               <Text style={[styles.phoneModalTitle, isTablet && styles.phoneModalTitleTablet]}>
@@ -131,16 +121,17 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
                 For: {admin.full_name}
               </Text>
             </View>
-            <TouchableOpacity onPress={handleClose} disabled={isChanging}>
+            <TouchableOpacity onPress={onClose} disabled={isChanging}>
               <MaterialCommunityIcons name="close" size={isTablet ? 28 : 24} color="#64748B" />
             </TouchableOpacity>
           </View>
+
           <ScrollView
             style={styles.phoneModalBody}
-            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Current Phone Info */}
+            {/* Current Phone */}
             <View style={styles.phoneInfoCard}>
               <MaterialCommunityIcons name="phone" size={24} color="#8B5CF6" />
               <View style={styles.phoneInfoContent}>
@@ -148,13 +139,10 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
                 <Text style={styles.phoneInfoNumber}>
                   {currentPhone || 'Not available'}
                 </Text>
-                <Text style={styles.phoneInfoNote}>
-                  This is the phone number currently associated with {admin.full_name}'s account
-                </Text>
               </View>
             </View>
 
-            {/* New Phone Number */}
+            {/* New Phone */}
             <View style={styles.inputGroup}>
               <View style={styles.inputLabelRow}>
                 <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
@@ -165,18 +153,19 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
               <TextInput
                 style={[styles.textInput, isTablet && styles.textInputTablet]}
                 value={newPhone}
-                onChangeText={(text) => handlePhoneChange(text, setNewPhone)}
-                placeholder="(555) 123-4567"
+                onChangeText={setNewPhone}
+                placeholder="+919315453437"
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
+                autoCapitalize="none"
                 editable={!isChanging}
               />
-              <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
-                Enter the new phone number including country code
+              <Text style={styles.inputSubtext}>
+                Use international format (E.164)
               </Text>
             </View>
 
-            {/* Confirm Phone Number */}
+            {/* Confirm Phone */}
             <View style={styles.inputGroup}>
               <View style={styles.inputLabelRow}>
                 <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
@@ -187,18 +176,16 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
               <TextInput
                 style={[styles.textInput, isTablet && styles.textInputTablet]}
                 value={confirmPhone}
-                onChangeText={(text) => handlePhoneChange(text, setConfirmPhone)}
-                placeholder="(555) 123-4567"
+                onChangeText={setConfirmPhone}
+                placeholder="+919315453437"
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
+                autoCapitalize="none"
                 editable={!isChanging}
               />
-              <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
-                Re-enter the phone number to confirm
-              </Text>
             </View>
 
-            {/* Reason for Change */}
+            {/* Reason */}
             <View style={styles.inputGroup}>
               <View style={styles.inputLabelRow}>
                 <Text style={[styles.inputLabel, isTablet && styles.inputLabelTablet]}>
@@ -207,95 +194,50 @@ const PhoneChangeModal: React.FC<PhoneChangeModalProps> = ({
                 <Text style={styles.requiredStar}>*</Text>
               </View>
               <TextInput
-                style={[styles.textInput, styles.textArea, isTablet && styles.textAreaTablet]}
+                style={[styles.textInput, styles.textArea]}
                 value={reason}
                 onChangeText={setReason}
-                placeholder="e.g., Lost phone, new device, etc."
+                placeholder="Lost phone / new number"
                 placeholderTextColor="#94A3B8"
                 multiline
-                numberOfLines={3}
                 editable={!isChanging}
               />
-              <Text style={[styles.inputSubtext, isTablet && styles.inputSubtextTablet]}>
-                Provide a reason for changing the phone number
-              </Text>
             </View>
 
-            {/* Important Note */}
+            {/* Warning */}
             <View style={styles.warningCard}>
               <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#F59E0B" />
-              <View style={styles.warningContent}>
-                <Text style={styles.warningTitle}>Important Information</Text>
-                <Text style={styles.warningText}>
-                  • Changing the phone number will require the admin to verify the new number{'\n'}
-                  • The admin may need to log in again{'\n'}
-                  • This action is logged for security purposes{'\n'}
-                  • Only perform this change with proper authorization
-                </Text>
-              </View>
-            </View>
-
-            {/* Summary */}
-            <View style={styles.summaryCard}>
-              <MaterialCommunityIcons name="clipboard-list-outline" size={24} color="#8B5CF6" />
-              <View style={styles.summaryContent}>
-                <Text style={styles.summaryTitle}>Change Summary</Text>
-                <View style={styles.summaryDetails}>
-                  <Text style={styles.summaryText}>
-                    • Admin: {admin.full_name}
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    • Current Phone: {currentPhone || 'Not available'}
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    • New Phone: {newPhone || 'Not set'}
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    • Reason: {reason || 'Not provided'}
-                  </Text>
-                </View>
-              </View>
+              <Text style={styles.warningText}>
+                This action is logged and requires admin authorization.
+              </Text>
             </View>
           </ScrollView>
+
+          {/* Footer */}
           <SafeAreaView edges={['bottom']} style={styles.phoneModalSafeFooter}>
             <View style={styles.phoneModalFooter}>
               <TouchableOpacity
-                style={[styles.cancelButton, isTablet && styles.cancelButtonTablet]}
-                onPress={handleClose}
+                style={styles.cancelButton}
+                onPress={onClose}
                 disabled={isChanging}
               >
-                <Text style={[styles.cancelButtonText, isTablet && styles.cancelButtonTextTablet]}>
-                  Cancel
-                </Text>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[
                   styles.submitButton,
-                  isTablet && styles.submitButtonTablet,
                   isChanging && styles.submitButtonDisabled,
-                  (!newPhone.trim() || !confirmPhone.trim() || !reason.trim() || newPhone !== confirmPhone) && styles.submitButtonDisabled,
                 ]}
                 onPress={handleSubmit}
-                disabled={
-                  isChanging ||
-                  !newPhone.trim() ||
-                  !confirmPhone.trim() ||
-                  !reason.trim() ||
-                  newPhone !== confirmPhone
-                }
+                disabled={isChanging}
               >
                 {isChanging ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator color="#FFF" />
                 ) : (
                   <>
-                    <MaterialCommunityIcons
-                      name="phone-sync"
-                      size={isTablet ? 20 : 16}
-                      color="#FFFFFF"
-                    />
-                    <Text style={[styles.submitButtonText, isTablet && styles.submitButtonTextTablet]}>
-                      Change Phone
-                    </Text>
+                    <MaterialCommunityIcons name="phone-sync" size={18} color="#FFF" />
+                    <Text style={styles.submitButtonText}>Change Phone</Text>
                   </>
                 )}
               </TouchableOpacity>

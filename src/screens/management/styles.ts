@@ -2287,7 +2287,64 @@ infoText: {
   color: '#0369A1',
   lineHeight: 16,
 },
+// Add these new styles to your existing styles.ts file:
 
+// New styles for layout fixes
+adminDetailsModalBodyFixed: {
+  padding: 20,
+  flex: 1,
+},
+
+adminDetailsActionsFixed: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+  marginBottom: 20,
+},
+
+adminDetailsActionButtonFixed: {
+  flex: 1,
+  minWidth: 100,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 10,
+  borderRadius: 10,
+  gap: 6,
+  borderWidth: 1,
+},
+
+additionalActionsFixed: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+  marginTop: 20,
+  marginBottom: 40,
+},
+
+additionalActionButtonFixed: {
+  flex: 1,
+  minWidth: 100,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 10,
+  borderRadius: 10,
+  gap: 6,
+  borderWidth: 1,
+},
+
+modalFooterFixed: {
+  backgroundColor: '#FFFFFF',
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+  paddingHorizontal: 20,
+  paddingVertical: 16,
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+},
 
 });
 export default styles;
